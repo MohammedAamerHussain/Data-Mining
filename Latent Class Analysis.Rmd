@@ -1,0 +1,189 @@
+---
+title: "Assignment 3 Part 1"
+author: "Aamer hussain"
+date: "7/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+library(poLCA)
+library(ggplot2)
+```
+The purpose of this clustering analysis is to uncover hidden (latent) variables in a group using latent class analysis
+for the German credit dataset.
+
+# Loading the German credit data
+```{r}
+GC <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /assignment 3 july 26/German_Credit.csv")
+```
+
+# Looking at different columns within the German credit dataset
+```{r}
+colnames(GC)
+```
+
+We have decided to use the following categorical  variables for our latent class analysis :
+
+1. Sex...Marital.Status
+3. Type.of.apartment
+4. Occupation
+
+```{r data, results='hide'}
+selected.variables <- GC[,c(10,16,18)]
+
+```
+
+# Splitting the training , test data into 70:30 ratio
+```{r}
+train.data.index <- sample(1:nrow(selected.variables), size = 0.7 * nrow(selected.variables))
+train.data <- selected.variables[train.data.index,]
+test.data <- selected.variables[-train.data.index,]
+```
+
+## Latent Class Analysis
+
+We are looking to create 2:6 LCA cluster solution using polCA library and selected variables with good separation between them .
+
+##  STEP 1
+Running the polCA 1000 times to find the global optima for the lowest AIC value
+```{r models}
+library(poLCA)
+f<-with(train.data, cbind(Sex...Marital.Status,Type.of.apartment, Occupation)~1)
+
+minimum.aic <- 100000
+for(i in 2:6){
+  LCA.model <- poLCA(f, train.data,nclass=i,nrep =100, tol=.001, maxiter = 100 ,verbose=FALSE, na.rm=TRUE, probs.start=NULL)
+  if(LCA.model$aic < minimum.aic){
+    minimum.aic <- LCA.model$aic
+    LCA.bestModel.AIC<-LCA.model
+  }
+} 
+```
+ 
+ We have the obtained the result of 3 classes from the above analysis of poLCA clustering solutions with respect to AIC value 
+
+
+Running the polCA 1000 times to find the global optima for the BIC value
+```{r}
+minimum.bic <- 100000
+for(i in 2:6){
+  LCA.model <- poLCA(f, train.data,nclass=i,nrep =100, tol=.001, maxiter = 100 ,verbose=FALSE, na.rm=TRUE, probs.start=NULL)
+  if(LCA.model$bic < minimum.bic){
+    minimum.bic <- LCA.model$bic
+    LCA.bestModel.BIC<-LCA.model
+  }
+}
+```
+
+We have obtained the result of 3 classes from the above analysis of poLCA clustering solutions with respect to AIC value 
+
+Now its time to analyse the values of AIC and BIC side by side since the models with global optima are built and save the AIC and BIC value for different clustering solutions for comparison
+
+```{r lca_comparisons}
+dataframe.AIC <- data.frame()
+dataframe.BIC <- data.frame()
+for(i in 2:6){
+  latent.class <- poLCA(f, train.data,nclass=i,nrep =100, tol=.001, maxiter = 100 ,verbose=FALSE, na.rm=TRUE, probs.start=NULL)
+  dataframe.AIC<- rbind(dataframe.AIC, cbind(i, (latent.class$aic)))
+  dataframe.BIC<-rbind(dataframe.BIC, cbind(i, (latent.class$bic)))
+}
+merge.table<-cbind(dataframe.AIC,dataframe.BIC$V2)
+names(merge.table)<- c("Classes","AIC","BIC")
+merge.table<-data.frame(merge.table)
+(merge.table)
+```
+
+## Step 2 :
+Plotting the graphs to validate the 3 cluster LCA solution based on the AIC and BIC values 
+
+```{r lca_plot}
+library(ggplot2)
+ggplot(merge.table, aes(Classes)) + 
+  geom_line(aes(y = AIC, colour = "AIC")) + 
+  geom_line(aes(y = BIC, colour = "BIC")) + 
+  labs(y = "Metrics")
+```
+As observed, there is an elbow at 3 classes/clusters solutions both for the AIC and BIC values 
+
+
+# Performing the final 3 cluster LCA solution for the training data
+
+```{r final_train_resultys}
+lca.train.results.3 <- poLCA(f, train.data,nclass=3,nrep =1000, tol=.001, maxiter = 1000,verbose=FALSE, na.rm=TRUE, probs.start=TRUE,graphs = TRUE)
+```
+
+
+## Step 3. Perform Holdout validation of LCA.
+```{r holdout_validation}
+f.test <- with(test.data, cbind(Sex...Marital.Status,Type.of.apartment, Occupation)~1)
+results.3.test <- poLCA(f.test,test.data,nclass=3,nrep =1000, tol=.001, maxiter = 1000,verbose=FALSE, graphs=TRUE, probs.start = lca.train.results.3$probs)
+```
+
+```{r}
+lca.train.results.3$aic
+```
+
+
+```{r}
+results.3.test$aic
+```
+
+## Step 4 :  Provide implications / commentary on the goodness, interpretability, stability, and adequacy of solutions.
+
+
+Interpretability:
+
+The marginal probabilities of these 3 variables look somewhat similar to certain extent in all 3 Classes/clusters between train and test data 
+
+Class 1 proportions and probablities look kind of similar for both train and test data except for a few exceptions .The first class with population share of 44% consists of lets say(German credit data had no labels provided by Greg) single females with high job profiles owning their residence or apartment .
+
+Class 2 with population share of 31% may have consisted of single females who rented their apartment and had good skilled positions .
+
+Class 3 with population share of 24% may have been dominated by married males of which most of them rented their apartment and had high level job positions .
+
+Goodness of fit : The log likelihood for both the train and test LCA models turned out to be quite different from each other . Besides that even AIC and BIC values were different from each other too for train and test models on LCA.
+
+Stability: We tried running the models 1000 times , we ensured that each solution reaches its global maxima which increased the stability of the model
+
+Adequacy of the solution : The solutions we obtained with 3 LCA were really not that adequate as all the metrics between train and holdout. Moreover we triued both 2 and 4 cluster solution although the elbow was found at 3 but again the solutions that we obtained 
+for both train and holdout didnt match . Since increasng or decreasing the cluster sizes did not generate any new insights , we claim
+that the obtained solution is not adequate .
+
+The clustering or the bucketing done with the above LCA clustering is not an optimal one . In order to improve the market segmentation , we should try including different variables to obtain better solutions. 
+
+We are not sure that LCA was an appropriate clustering technique for this german credit dataset where we had to choose just the categorical varaiables .
+We had to go through a hard time finding the right combination of variables that achieved both good
+separation between cluster sizes and also performed well in the  holdout test analysis. I think LCA would be much more suitable and 
+appropriate for a  disperate population or with much more data.
+
+
+#Step 5 :Comment on the similarity/differences between the clustering solutions you generated in Assignment 1 with the 
+solution you generated using LCA.
+
+LCA was chosen only for the categorical variables only where as kmean/komeans works well only for the numerical variables .
+In the kmeans/komeans we clustered the german credit data based on the installment rate percentage , amount and duration  and it resulted in good results where the mean values were different from each cluster indicating that there was good separation between clusters .
+in contrast to the LCA cluster soluton , there was not any good separation between different cluster and moreover the metrics did not match between the train and holdout analysis. 
+
+In comnclusion we say that each method may have its own specific use case. A good separation between the cluster would have reduced the risk for the market segmentation . 
+
+
+
+
+
+
+
+
+
+
+
+
+

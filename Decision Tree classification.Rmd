@@ -1,0 +1,342 @@
+---
+title: "Assignment 4 part 2"
+author: "Aamer hussain"
+date: "8/6/2020"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9")
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+
+install.packages("gains",repos = "http://cran.us.r-project.org")
+
+install.packages("rpart.plot",repos = "http://cran.us.r-project.org")
+
+install.packages("rattle",repos = "http://cran.us.r-project.org")
+```
+
+
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(ROCR))
+suppressMessages(library(caret))
+suppressMessages(library(gains))
+suppressMessages(library(corrr))
+suppressMessages(library(MASS))
+suppressMessages(library(ggvis))
+suppressMessages(library(corrplot))
+suppressMessages(library(caTools))
+suppressMessages(library(ROCR))
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+#suppressMessages(library(MASS))
+#suppressMessages(library(glmnet))
+suppressMessages(library(ggplot2))
+suppressMessages(library(rpart))
+suppressMessages(library(rattle))
+suppressMessages(library(RColorBrewer))
+suppressMessages(library(rpart.plot))
+suppressMessages(library(RColorBrewer))
+```
+
+```{r}
+dummyVar.diabetes <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9/DummyVar_diabetes.csv", header = TRUE,stringsAsFactors = F, strip.white = TRUE, na.strings = c("NA", "?"," ","."))
+```
+
+
+```{r}
+NoDummyVar.diabetes <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9/NonDummyVar_diabetes.csv", header = TRUE,stringsAsFactors = F, strip.white = TRUE, na.strings = c("NA", "?"," ","."))
+```
+
+For the Classfication decision tree , we will be using both Dummy variable diabetes data as well as the Non-Dummy variable diabetes data that we used for logistic regression and build two different decision tree and compare the accuracy between them .
+
+## Step 1 Creating the train and test dataset from the Dummy variable diabetes dataset
+```{r}
+
+library(caret)
+set.seed(96843)
+dummyVar.index <- createDataPartition(dummyVar.diabetes$readmitted, p = .7, list = FALSE, )
+dummyVar.train <- dummyVar.diabetes[dummyVar.index,]
+dummyVar.test  <- dummyVar.diabetes[-dummyVar.index,]
+```
+
+## Building the first decision tree on our dummy variable data by inlcuding all the 21 dummy features
+```{r}
+rpart.tree.DummyVar <- rpart(formula = readmitted ~ ., data=dummyVar.train, method = 'class',control=rpart.control(cp=0,minsplit=15,minbucket = 10, xval=10, maxsurrogate=0, maxdepth = 30 ,parms=list(split=c("information","gini"))))
+```
+
+I have  set  minsplit param to 15, which makes sure that there must be a atleast or minimum of 30 observations/datapoints/rows in a node for split to be attempted on it.
+
+## Plotting the decision tree
+```{r}
+
+par(mar=c(1,1,0.25,1))
+plot(rpart.tree.DummyVar,main="Classification Decision Tree: Diabetes Data", compress=TRUE, branch=0.4,uniform=TRUE)
+text(rpart.tree.DummyVar,cex=0.6,col=4,use.n=TRUE,fancy=TRUE,fwidth=0.4,fheight=0.4,bg=c(5))
+```
+
+
+
+
+This decision tree model is very complex with 21 dummy features. The nodes and splits of this tree are 
+completely uninterpretable.
+
+
+We can fix this interpetability problem of this full model decision tree by pruning the tree. The first step that has to be taken to fix this problem is to find the correct and accurate value of the needed/required complexity parameter (cp). 
+
+Correct complexity parameter is a value that penalizes overall fit of the decision tree by adding each node. 
+
+## Using printcp() to view results for different tree lengths
+```{r}
+printcp(rpart.tree.DummyVar)
+```
+
+The optimal value of the complexity parameter can be found by choosing the one that  minimizes xerror value.
+
+
+There are multiple CP values that minimize the xerror in this table. I've chose then one that outputs a smaller tree.  The lowest xerror value from the table is 0.79368 with corresponding nsplit = 112 value and Complexity parameter value of '2.1856e-04' which is approximately zero.
+
+## Using plotcp () to plot complexity parameter.
+```{r}
+plotcp(rpart.tree.DummyVar)
+```
+
+
+I have tried using the value from the printcp table with the lowest xerror value for the complexity parameter and pruned the tree using that value and it lead to a decision which was less complex than the full model but still it was uninterpretable after plotting it.
+
+So I decided to use the value of CP from the plotcp() graph where the lines intercepts the x-axis at 0.00048
+
+
+## pruning the full model decision classification tree using CP=0.00048
+```{r}
+prunedtree.dummyVar <- prune(rpart.tree.DummyVar, cp = 0.00048, xval =10, minsplit = 15, minbucket = 10)
+```
+
+
+## Plotting the pruned decision tree
+```{r}
+rpart.plot(prunedtree.dummyVar)
+```
+
+This tree is relatively interpretable compared to the full model decision tree.
+
+
+
+Interpreting the pruned decision tree from the plot:
+
+
+The pruned classification decision tree is much easier to  interpret and use . this tree can be interpreted in the form of 6 clusters based on the feature on which the split has been performed.
+ We can try to name name each of these groups or clusters . 
+
+The variables of our interest are
+  - Number_inpatient(no of times admitted as an inpatient) -- split on >=4 branching out into 'many' (Left) and 'less' (Right) number of times 
+  
+  - number_diagnosis,  -- split on 2 branching out into many no of times (L) and less no of times (R), 
+  
+  - Age -- split on 2 belonging to 30-60 age group and 'above60' on left (L) and 0-30 years age group on right (R)
+  
+  -DiabetesMed i.e no of diabetes medications the patient was administered -- split on less than 2 (L) and more than 2 medications on right (R)
+  
+If we were to understand these groups 1-6 from left to right, No.6  is the easiet one explain. These are the patients with major health vulnerability or lower health index. These diabetes patients can be predicted to be Readmitted right off the bat. 
+
+The next split is on Number of diagnosis -> Group #5. Here our decision tree is trying to predict where the patients is likely to be readmitted based on the diagnosis that has been done on the patient. The left branch has all the patients that have been diagnosed in the past for more than 2 times.
+
+
+The next split is on Age which is group  #4 and refers to the Age group of the patient. The left branch of this node split groups all the patients between the age group 30-60 years or less than 30 years of age.The right branch of this node split has all the patients that are above 60 years.
+
+The next split is on the number of emergency (no of times the patient has been admitted as an emergency patient)
+The left branch of this split includes all the patient that have been admitted as an emergency patient for more than 3 times and the right branch includes all the patient that have been admitted as an emergency patient for less than 3 times.
+
+The final split is based on diabetesMed . This group has all the patients that have been taking less than 2 diabetes related medications. and have undergone certain lab procedures.
+
+
+Other than the ones that have been mentined there aren't that many groups that make intuitive sense. Interpretation of these groups requires a lot of analysis.
+
+So overall the left branch from the root node has all the patients that are more likely to be readmitted as they have lower health index and the right branch has all the patients that are less likly to be readmitted and are with better health index.
+
+```{r}
+summary(prunedtree.dummyVar)
+```
+
+## Making the predictions from the pruned Decision tree using the dummy variable diabetes test data 
+```{r}
+rpart.pred.dummyVar <- predict(prunedtree.dummyVar, dummyVar.test, type = "class")
+```
+
+
+## generating the confusion matrix for the pruned decision for dummy variable test data
+```{r}
+confusionMatrix(rpart.pred.dummyVar, as.factor(dummyVar.test$readmitted), positive = "1")
+```
+
+So the accuracy came around 62% from the pruned decision tree on dummy variable test diabetes data.
+
+
+## Making the predictions from the pruned Decision tree using the dummy variable diabetes Train data 
+```{r}
+rpart.pred.dummyVar.train <- predict(prunedtree.dummyVar,data = dummyVar.train, type = "class")
+```
+
+
+## generating the confusion matrix for the pruned decision for dummy variable Train data
+```{r}
+confusionMatrix(rpart.pred.dummyVar.train, as.factor(dummyVar.train$readmitted), positive = "1")
+```
+
+
+So the accuracy came around 63% from the pruned decision tree on dummy variable Train diabetes data. So there is a good level of stability between the train and test data predictions for readmissions. Therefore we have similar results from our train and test data.
+
+
+
+Now its time to try out the 2nd approach where we use Non-dummy variable data to feed into a decision tree model 
+```{r}
+library(caret)
+set.seed(96843)
+NoDummyVar.index <- createDataPartition(NoDummyVar.diabetes$readmitted, p = .7, list = FALSE)
+NoDummyVar.train <- NoDummyVar.diabetes[NoDummyVar.index,]
+NoDummyVar.test  <- NoDummyVar.diabetes[-NoDummyVar.index,]
+```
+
+
+## Building the first decision tree on our dummy variable data by inlcuding all the 21 Non-dummy features
+```{r}
+rpart.tree.NonDummyVar <- rpart(formula = readmitted ~ ., data=NoDummyVar.train, method = 'class',control=rpart.control(cp=0,minsplit=15,minbucket = 10, xval=10, maxsurrogate=0, maxdepth = 30 ,parms=list(split=c("information","gini"))))
+```
+
+I have  set  minsplit param to 15, which makes sure that there must be a atleast or minimum of 30 observations/datapoints/rows in a node for split to be attempted on it. 
+
+## Plotting the decision tree of our Non-dummy variable diabetes data.
+```{r}
+
+par(mar=c(1,1,0.25,1))
+plot(rpart.tree.NonDummyVar,main="Classification Decision Tree: Diabetes Data", compress=TRUE, branch=0.4,uniform=TRUE)
+text(rpart.tree.NonDummyVar,cex=0.6,col=4,use.n=TRUE,fancy=TRUE,fwidth=0.4,fheight=0.4,bg=c(5))
+```
+
+
+This decision tree model is very complex with 21 Non-dummy features. The nodes and splits of this tree are 
+completely uninterpretable.
+
+
+We can fix this interpetability problem of this full model decision tree by pruning the tree. The first step that has to be taken to fix this problem is to find the correct and accurate value of the needed/required complexity parameter (cp). 
+
+Correct complexity parameter is a value that penalizes overall fit of the decision tree by adding each node. 
+
+## Using printcp() to view results for different tree lengths for Non-dummy variable diabetes data
+```{r}
+printcp(rpart.tree.NonDummyVar)
+```
+The optimal value of the complexity parameter can be found by choosing the one that  minimizes xerror value.
+
+
+There are multiple CP values that minimize the xerror in this table. I've chose then one that outputs a smaller tree.  The lowest xerror value from the table is 0.79627 with corresponding nsplit = 35 value and Complexity parameter value of '4.9956e-04' which is approximately zero.
+
+## Using plotcp () to plot complexity parameter for Non-dummy variable diabetes data
+```{r}
+plotcp(rpart.tree.NonDummyVar)
+```
+
+I have tried using the value from the printcp table with the lowest xerror value for the complexity parameter and pruned the non dummy variable decision tree using that value and it lead to a decision which was less complex than the full model but still it was uninterpretable after plotting it.
+
+So I decided to use the value of CP from the plotcp() graph where the lines intercepts the x-axis at 0.00051
+
+
+## pruning the full model decision classification tree using CP=0.00048
+```{r}
+prunedtree.NonDummyVar <- prune(rpart.tree.NonDummyVar, cp = 0.00051, xval =10, minsplit = 15, minbucket = 10)
+```
+
+
+## Plotting the pruned decision tree for Non-dummy variable diabetes data
+```{r}
+rpart.plot(prunedtree.NonDummyVar)
+```
+
+
+The interpretation of this tree on non-dummy variable data is pretty similar to the interpretation that we have on Dummy variable data.
+
+
+```{r}
+summary(prunedtree.NonDummyVar)
+```
+
+## Making the predictions from the pruned Decision tree using the Non-dummy variable diabetes test data 
+```{r}
+rpart.pred.NoDummyVar.test <- predict(prunedtree.NonDummyVar, NoDummyVar.test, type = "class")
+```
+
+
+## generating the confusion matrix for the pruned decision for Non-dummy variable test data
+```{r}
+confusionMatrix(rpart.pred.NoDummyVar.test, as.factor(NoDummyVar.test$readmitted), positive = "1")
+```
+
+
+
+So the accuracy came around 62% from the pruned decision tree on Non-dummy variable test diabetes data similar to the Dummy variable data.
+
+
+## Making the predictions from the pruned Decision tree using the Non-dummy variable diabetes Train data 
+```{r}
+rpart.pred.NonDummyVar.train <- predict(prunedtree.NonDummyVar,data = NoDummyVar.train, type = "class")
+```
+
+
+## generating the confusion matrix for the pruned decision for Non-dummy variable Train data
+```{r}
+cfmatrix.dtree.NonDummy <- confusionMatrix(rpart.pred.NonDummyVar.train, as.factor(NoDummyVar.train$readmitted), positive = "1")
+```
+
+
+## Confusion matrix by class for train Non-dummy variable
+```{r}
+
+cfmatrix.dtree.NonDummy$byClass
+```
+
+
+## F1 score or train Non-dummy variable
+```{r}
+
+cfmatrix.dtree.NonDummy$byClass['F1']
+```
+
+We were able to achieve F1 score of about 0.53 on our train Non dummy variable diabetes data from our decision tree model.
+
+
+So the accuracy came around 63% from the pruned decision tree on Non-dummy variable Train diabetes data. So there is a good level of stability between the train and test data predictions for readmissions. Therefore we have similar results from our train and test data on our Non-dummy variable data as well.
+
+## Summarizing the results
+
+
+
+The overall accuracy of the logistic regression using our non-dummy variable diabetes dataset was almost equal to the accuracy of the decision tree using both dummy and non dummy variable data which was was around 62%.
+
+
+We have used 2  different approaches  to see which algorithm would produce the best accuracy and best sensitivity with regards to correctly and accurately identifying the patients who are more likely to end up being readmitted to the medical facility or a hospital in less than 30 days or so. We found that the 2nd iteration of the decision tree after pruning gives the best value for sensitivity. 
+
+If we are more interested in predicting which particular patients are most likely to be readmitted, I would pick the model with the highest value for sensitivity and minimize the type 1 error . 
+
+Hospital or health administrators could possibly can use this decision tree algorithm to in order to help or assist  them to see which particular patient characteristics are likely to preddict or classify a patient in the 'readmit' category. The hospital or health institutions can then implement policies or procedures or take initiatives to minimize the proportion of readmitted patients.
+
+Sensitivity is not major concern because type 1 error in this case does not affect the mortality of the patient i.e if a patient is wrongly classified or predicted as 'Readmitted' , he is going to admitted to hospital without any major health concern which is fine.
+
+On the other hand We are also concerned about the specificity of our model because it directly affects the mortality rates if the patients that were not predicted to be readmitted but actually should have been i.e type 2 error. To understand this in terms of the classfication metrics , we need to look at the specificity score for both logistic regression and also decision tree.
+
+The specificity of the logistic regression model is around 0.75 where as for the decision tree it is around 0.72
+
+The sensitivity  of the logistic regression model is 0.46  where as for the decision tree it is 0.56.
+
+We need to find the balance between the sensitivity/specificity trade off.
+
+ I would choose decision tree model as it has overall equal specificity compared to logistic regression model but better sensitivity as well.Decision tree model is likely to perform better in overall capacity.
+
+To improve the accuracy or sensitivity or specificity even further, we might other advanced approaches like  random forest or gradient boosting or adaptive boosting methods among the ensemble methods , which may reduce the misclassifications or the error rate even further.

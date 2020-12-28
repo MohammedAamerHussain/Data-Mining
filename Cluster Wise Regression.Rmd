@@ -1,0 +1,308 @@
+---
+title: "Assignment 5 part 1"
+author: "Aamer hussain"
+date: "8/15/2020"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+```
+
+## installing the packages and loading the libraries 
+## Step 1: Using the data from the Caret package in R
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(caret))
+data("GermanCredit")
+german_credit <- GermanCredit
+head(german_credit)
+```
+
+
+```{r}
+glimpse(german_credit)
+```
+
+# Step 2 : splitting the data between the training and test samples
+```{r}
+german.credit.df <- german_credit[,c(2,1,3:7)]
+
+train.dataset.size <- floor(0.70*nrow(german.credit.df))
+
+set.seed(123456)   
+train_ind <- sample(seq_len(nrow(german.credit.df)),size = train.dataset.size)  
+
+train.dataset <- german.credit.df[train_ind,] 
+test.dataset <- german.credit.df[-train_ind,]  
+
+```
+
+```{r}
+head(train.dataset)
+```
+## 2. Clustreg and Clustreg.predict function
+
+
+```{r clustereg}
+clustreg=function(dat,k,tries,sed,niter) {
+  set.seed(sed)
+  dat=as.data.frame(dat)
+  rsq=rep(NA,niter)
+  res=list()
+  rsq.best=0
+  
+  for(l in 1:tries) {
+    
+  	c = sample(1:k,nrow(dat),replace=TRUE)
+  	yhat=rep(NA,nrow(dat))
+  	
+  	for(i in 1:niter) {		
+  		resid=pred=matrix(0,nrow(dat),k)
+  		for(j in 1:k){	
+  			pred[,j]=predict(glm(dat[c==j,],family="gaussian"),newdata=dat)		
+  			resid[,j] = (pred[,j]-dat[,1])^2
+  		}
+  		
+  	c = apply(resid,1,fun.index.rowmin)
+  	
+  	for(m in 1:nrow(dat)) {yhat[m]=pred[m,c[m]]}
+  	
+  	rsq[i] = cor(dat[,1],yhat)^2	
+    }
+  	
+    if(rsq[niter] > rsq.best) {	
+    	rsq.best=rsq[niter]
+    	l.best=l
+      c.best=c
+    	yhat.best=yhat
+    }
+  }
+  
+  for(i in k:1) res[[i]]=summary(lm(dat[c.best==i,]))
+	
+  return(list(
+    data=dat,
+    nclust=k,
+    tries=tries,
+    seed=sed,
+    rsq.best=rsq.best,
+    number.loops=niter, 
+    Best.try=l.best,
+    cluster=c.best,
+    results=res))
+}
+fun.index.rowmin=function(x) {
+    
+    z=(1:length(x)) [x == min(x)]
+    if(length(z) > 1) { z=sample(z,1)}
+    return ( z ) 
+}
+clustreg.predict=function(results,newdat){
+	yhat=rep(NA,nrow(newdat))
+	resid=pred=matrix(0,nrow(newdat),length(table(results$cluster)))
+		
+		for(j in 1:length(table(results$cluster))) {			
+			pred[,j] = predict(glm(results$data[results$cluster==j,],family="gaussian"),
+			                   newdata=newdat)		
+			
+			resid[,j] = (pred[,j]-newdat[,1])^2
+		}
+	c = apply(resid,1,fun.index.rowmin)
+	
+	for(m in 1:nrow(newdat)) {yhat[m]=pred[m,c[m]]}
+	
+	rsq = cor(newdat[,1],yhat)^2	
+  return(list(results=results,newdata=newdat,cluster=c,yhat=yhat,rsq=rsq))
+}
+```
+
+## Step 3. Building the cluster wise regression model for the training data
+
+Building a clusterwise regression model with 1, 2, 3 cluster solutions for predicting
+"Amount" from the other numeric columns for the german credit data
+
+```{r}
+clustRegression.1 <- clustreg(train.dataset,1,1,321,1)
+clustRegression.2 <- clustreg(train.dataset,2,2,321,10)
+clustRegression.3 <- clustreg(train.dataset,3,2,321,10)
+```
+
+
+
+```{r}
+prop.table(table(clustRegression.1$cluster))
+prop.table(table(clustRegression.2$cluster))
+prop.table(table(clustRegression.3$cluster))
+```
+
+The 1st clustReg model has 100% of the data as the k value is '1'.
+The 2nd clustReg model split the training data rougly 80:20 between the 2 clusters.
+The 3rd  model three split the training data roughly 20:20:60.
+
+## R-squared of the clusters for the training data
+```{r}
+Rsq.train.cluster1 <- clustRegression.1$rsq.best
+Rsq.train.cluster2 <- clustRegression.2$rsq.best
+Rsq.train.cluster3 <- clustRegression.3$rsq.best
+Rsq.train <- c(Rsq.train.cluster1, Rsq.train.cluster2, Rsq.train.cluster3)
+Rsq.train
+```
+
+## Step 4 .Scree plot for R-squared of the clusters for the train data
+```{r}
+
+par(mfrow = c(1, 1))
+plot(1 : 3, Rsq.train, main = "Scree Plot for Cluster-wise regression for training data",
+xlab = "Number of Clusters", ylab = "R-Squared", type = "l", col = "11")
+
+```
+
+Clearly 2 cluster solutions looks optimal looking at the elbow.
+
+## Variance explained by each by different cluster solutions
+
+```{r}
+train.rsquared = data.frame(
+  nclusters=1:3, 
+  rsqtrain.calc = sapply(list(clustRegression.1, clustRegression.2, clustRegression.3), 
+               function(i) i$rsq.best))
+ggplot(train.rsquared, aes(x=nclusters, y=rsqtrain.calc)) + 
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(round(rsqtrain.calc*100,1),"%")), vjust=1.5, color="white") + 
+  labs(x="Number of Clusters",
+       y="R-squared",
+       title="Variance explained by different clusters")
+```
+
+A 2 cluster solution explains more than 80% of the variance of our german credit data. However we have to look at the holdout validation before we finalize a final cluster model.
+
+## Step 5. Holdout validation
+
+
+```{r}
+holdout.cluster1 <- clustreg.predict(clustRegression.1, test.dataset)
+holdout.cluster2 <- clustreg.predict(clustRegression.2, test.dataset)
+holdout.cluster3 <- clustreg.predict(clustRegression.3, test.dataset)
+```
+
+
+```{r}
+rsq.test <- c(holdout.cluster1$rsq, holdout.cluster1$rsq,
+              holdout.cluster1$rsq)
+rsq.test
+```
+
+Looks like the R-squared value for each of the 3 cluster solution is exactly the same for the holdout data.
+
+We are ruling out the 1 cluster solution because it doesnt really explain much of the variance of our data.
+
+
+## Understanding the Cluster sizes between train and test data for the 2 cluster solution
+
+```{r}
+bind_rows(
+  prop.table(table(clustRegression.2$cluster)),
+  prop.table(table(holdout.cluster2$cluster))) %>%
+  mutate(group=c('Train', 'Holdout'))
+
+```
+
+## Understanding the Cluster sizes between train and test data for the 3 cluster solution
+
+```{r}
+bind_rows(
+  prop.table(table(clustRegression.3$cluster)),
+  prop.table(table(holdout.cluster3$cluster))) %>%
+  mutate(group=c('Train', 'Holdout'))
+```
+
+
+The clusers sizes are almost the same between 2-3 cluster solution and also between the train and holdout data
+
+## Understanding the variance explained by different cluster solution for our holdout data
+```{r}
+test.rsquared = data.frame(
+  nclusters.test=1:3, 
+  rsqtest.calc = sapply(list(holdout.cluster1, holdout.cluster2, holdout.cluster3), 
+               function(i) i$rsq))
+ggplot(test.rsquared, aes(x=nclusters.test, y=rsqtest.calc)) + 
+  geom_bar(stat="identity") +
+  geom_text(aes(label=paste0(round(rsqtest.calc*100,1),"%")), vjust=1.5, color="white") + 
+  labs(x="Number of Clusters",
+       y="R-squared",
+       title="Holdout validation or Variance explained by different clusters")
+```
+
+## Percentage decrease from train to holdout R-squared
+```{r}
+percentaget.rsq.change <- (test.rsquared - train.rsquared) / train.rsquared
+percentaget.rsq.change$nclusters <- 1:3
+pct.df.rsq <- cbind(train=train.rsquared$rsq, 
+                holdout=test.rsquared$rsq, 
+                percentaget.rsq.change = percentaget.rsq.change$rsq)
+row.names(pct.df.rsq) <- 1:3
+round(pct.df.rsq * 100, 1)
+```
+
+
+The percentage drop of R-squared from train to holdout is not much for the 2 cluster and 3 cluster solution.The R-squared values have a level of stability between the train and holdout dataset of german credit.
+
+
+
+```{r}
+table(clustRegression.2$cluster, clustRegression.3$cluster)
+```
+
+##  5. Cluster Interpretation of the 2 cluster solution
+```{r}
+clustRegression.2$results
+```
+
+
+For the 2-cluster solution observing the p-values only Duration and InstallmentRatePercentage have significant impact on the 1st cluster where as almost all the predictors except the NumberPeopleMaintenance have significant impact on the 2nd cluster assignment . 
+
+Only Duration and InstallmentRatePercentage dominate the cluster assignment of the 1st cluster where as all the predictors except the NumberPeopleMaintenance dominate the cluster assignment of the 2nd cluster.
+
+The loans are structured in 2 different ways in these 2 clusters with different cluster assignments:
+
+For the 1st cluster or the loans in the first cluster , the loan amount starts at a low level and increases with duration and decreases with with installment rate percentage of our german credit data.
+
+In the 2nd cluster , the loan amount starts at a much higher level increasing with the duration and then decreasing rapidly with the InstallmentRatePercentage. The intercept value is much higher in this case which indicates these loans are very price sensitive. In this group people are granted loans only if their NumberExistingCredits is significantly low. Even the age of the people in this group is low.
+
+##  5. Cluster Interpretation of the 3 cluster solution
+```{r}
+clustRegression.3$results
+```
+
+For the 3-cluster solution all the predictors play a dominant role in the cluster assignment of the 1st cluster.
+The intercept plays a huge role as well in the cluster assignment. In this 3 cluster solution, the loans are structured in 3 different ways/clusters looking at the coefficients - high balance , medium balance and low balance loans.
+In each cluster , the loan amount is sensitive to different values of different predictors.
+
+The first cluster or the 1st type of loans have a very low loan balance with loan amount increasing with Duration , InstallmentRatePercentage, Residence duration and age and decreases with NumberExistingCredits and NumberPeopleMaintenance. These loans are designated for the people who have low number pre-existing credit accounts or customers with very thin credit history .
+
+The second cluster groups customers with very high loan balance or loan amount . In this cluster only Duration , InstallmentRatePercentage and NumberExistingCredits play a dominant role. Loan amount slightly increases with Duration and rapidly decreases with InstallmentRatePercentage. The loan amount is very sensitive to InstallmentRatePercentage. These very high loan amounts are awarded to people with many pre-existing credit accounts or customers with very long credit history. These loans have very low InstallmentRatePercentage.
+
+The third cluster contains customers with medium size loans .Loan amount slightly increases with Duration and slightly decreases with InstallmentRatePercentage. Again in this cluster only duration and InstallmentRatePercentage play a dominant role in the cluster assignment .
+
+
+## Final Comments/ Summary
+
+After the cluster interpretation of both 2 cluster solution and 3 cluster solution , I would like to go with the 3 cluster because the cluster assignment is clear and thorough and 3 cluster solution performs better taking into consideration the variance explained and R-squared. The interpretation was clear and made sense intuitively .
+
+Cluster wise regression algorithm can give us good clustering or groupings on the german credit data.
+This algorithm discovered the underlying latent classes and increased the fit of a regression model. Thsi method works by first randomly assigning data points to different clusters , then performs  regression analysis by minimizing residual distance, then checks to see if the regression gets worse or better.
+
+This is a good way to cluster data compared to main stream clustering algorithms like k-means algorithm .
+
+The final solution was validated through holdout validation through test german credit data.
+
+3 cluster solutions yielded better R-squared results both for the train as well as the holdout data.

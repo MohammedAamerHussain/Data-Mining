@@ -1,0 +1,816 @@
+---
+title: "Assigment 4 part 1"
+author: "Aamer hussain"
+date: "8/4/2020"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9")
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+
+install.packages("gains",repos = "http://cran.us.r-project.org")
+
+
+
+```
+
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(ROCR))
+suppressMessages(library(caret))
+suppressMessages(library(gains))
+suppressMessages(library(corrr))
+suppressMessages(library(MASS))
+suppressMessages(library(ggvis))
+suppressMessages(library(corrplot))
+suppressMessages(library(caTools))
+suppressMessages(library(ROCR))
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+#suppressMessages(library(MASS))
+#suppressMessages(library(glmnet))
+suppressMessages(library(ggplot2))
+
+```
+
+##   Loading the Diabetes data from the canvas in a fully cleaned and imputed way
+```{r}
+diabetes.data <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9/Diabetese Dataset Files/diabetes_data.csv", header = TRUE,stringsAsFactors = F, strip.white = TRUE, na.strings = c("NA", "?"," ","."))
+```
+
+
+
+```{r}
+glimpse(diabetes.data)
+```
+
+```{r}
+colnames(diabetes.data)
+```
+
+```{r}
+head(diabetes.data,20)
+```
+
+# Finding the number of missing values in the diabetes dataset
+```{r}
+colSums(is.na(diabetes.data))
+```
+
+
+```{r}
+temp.diabetes.data <- diabetes.data
+```
+
+# Dealing with the missing values 
+```{r}
+temp.diabetes.data[temp.diabetes.data == '?'] <- NA
+temp.diabetes.data <- filter(temp.diabetes.data, temp.diabetes.data$race != "?") 
+temp.diabetes.data <- filter(temp.diabetes.data, temp.diabetes.data$gender != "Unknown/Invalid") 
+cleaning.data <- na.omit(temp.diabetes.data)
+```
+
+
+# Removing features with more than 40% NA
+```{r}
+
+cleaning.data <- cleaning.data[, which(colMeans(!is.na(cleaning.data)) > 0.40)]
+```
+
+
+# Removing rows with more than 40% NA
+```{r}
+
+cleaning.data <- cleaning.data[which(rowMeans(!is.na(cleaning.data)) > 0.4), ]
+```
+
+# Removing both columns and rows with more than 40% NA
+```{r}
+
+
+cleaning.data <- cleaning.data[which(rowMeans(!is.na(cleaning.data)) > 0.40), which(colMeans(!is.na(cleaning.data)) > 0.40)]
+```
+
+# Removing the duplicates
+```{r}
+cleaning.data <- cleaning.data[!duplicated(cleaning.data), ]
+```
+
+# Taking only the unique rows
+```{r}
+
+cleaning.data <- unique(cleaning.data)
+```
+
+#Removing all the medications columns
+```{r}
+cleaning.data=cleaning.data[,setdiff(colnames(diabetes.data),c('examide', 'citoglipton', 'glimepiride.pioglitazone',	"metformin.rosiglitazone", 'acetohexamide', 'repaglinide',	'nateglinide',	'chlorpropamide', 'tolbutamide',
+                                  'rosiglitazone',	'acarbose',	'miglitol', 'troglitazone',	'tolazamide', 'glyburide.metformin',	'glipizide.metformin',	'metformin.pioglitazone',
+                                  'metformin','glimepiride','pioglitazone','glipizide','glyburide'))]
+colnames(cleaning.data)
+```
+
+#  Grouping Admission source ids into 'clinical referral' , 'emergency' etc
+```{r}
+table(cleaning.data$admission_source_id)
+cleaning.data$admission_source_id=as.factor(ifelse(cleaning.data$admission_source_id %in% c(as.character(2:6), as.character(8:10), '11','13','14', '17','22','25'), '0',cleaning.data$admission_source_id))
+table(cleaning.data$admission_source_id)
+```
+
+
+#  Grouping discharge disposition ids into groups such as 'home' , 'transferred' and 'left_AMA' etc
+```{r}
+cleaning.data$discharge_disposition_id <- as.factor(ifelse(cleaning.data$discharge_disposition_id ==  setdiff( unique(cleaning.data$discharge_disposition_id), c('2', '4', '5', as.character(7:28))  ), cleaning.data$discharge_disposition_id, '0') )
+table(cleaning.data$discharge_disposition_id)
+```
+
+
+
+# Age 
+```{r}
+cleaning.data$age=as.factor(ifelse(cleaning.data$age=="[0-10)" | cleaning.data$age== '[10-20)' | cleaning.data$age== '[20-30)' ,'age_under30',
+                          ifelse(cleaning.data$age == '[30-40)' | cleaning.data$age == '[40-50)' | cleaning.data$age == '[50-60)','age_30To60', 
+                                 ifelse(cleaning.data$age == '[60-70)' | cleaning.data$age == '[70-80)' | cleaning.data$age == '[80-90)' | cleaning.data$age == '[90-100)','Above60', cleaning.data$age))))
+
+
+```
+
+
+
+
+# Converting the 'readmitted' feature to binary 
+```{r}
+cleaning.data$readmitted <- (ifelse(cleaning.data$readmitted == "<30" | cleaning.data$readmitted == ">30", 1,0))
+table(cleaning.data$readmitted)
+```
+
+
+# Pre-processing 'admission_type_id' feature
+
+admission types 1, 2 and 7 correspond to Emergency, Urgent Care and Trauma, and thus were combined into a single category as these are all non-elective situations. 
+
+Clubbing 2 and 7 into 1 admission_type_id
+```{r}
+cleaning.data$admission_type_id=as.factor(ifelse(cleaning.data$admission_type_id == '2' | 
+                                          cleaning.data$admission_type_id == '7', '1', cleaning.data$admission_type_id))
+```
+
+
+Clubbing 6 and 8 into 5 admission_type_id
+```{r}
+cleaning.data$admission_type_id=as.factor(ifelse(cleaning.data$admission_type_id == '6' | 
+                                          cleaning.data$admission_type_id == '8', '5', cleaning.data$admission_type_id))
+table(cleaning.data$admission_type_id)
+```
+
+# Merging admission_type_id '5' into admission_type_id '4'
+```{r}
+cleaning.data$admission_type_id=as.factor(ifelse(cleaning.data$admission_type_id == '5', '4', cleaning.data$admission_type_id))
+table(cleaning.data$admission_type_id)                         
+```
+
+
+## diagnosis1 or diag1
+```{r}
+
+cleaning.data$diag_1= as.factor(ifelse((cleaning.data$diag_1 >=390 & cleaning.data$diag_1 <= 459) | cleaning.data$diag_1 == 785, 'Circulatory',
+                              ifelse((cleaning.data$diag_1 >=460 & cleaning.data$diag_1 <=519) | cleaning.data$diag_1 == 786, 'Respiratory',
+                                     ifelse((cleaning.data$diag_1 >= 520 & cleaning.data$diag_1 <= 579) | cleaning.data$diag_1 == 787, 'Digestive',
+                                            ifelse(cleaning.data$diag_1 >= 250 & cleaning.data$diag_1 < 251, 'Diabetes',
+                                                   ifelse(cleaning.data$diag_1 >= 800 & cleaning.data$diag_1<=999, 'Injury',
+                                                          ifelse(cleaning.data$diag_1>=710 & cleaning.data$diag_1<= 739, 'Musculoskeletal',
+                                                                 ifelse((cleaning.data$diag_1>= 580 & cleaning.data$diag_1 <= 629) | cleaning.data$diag_1 == 788, 'Genitourinary',
+                                                                        ifelse((cleaning.data$diag_1>= 140 & cleaning.data$diag_1 <= 239) | cleaning.data$diag_1 == 780 | cleaning.data$diag_1 == 781 | cleaning.data$diag_1 == 784 |
+                                                                                 (cleaning.data$diag_1>= 790 & cleaning.data$diag_1 <= 799) | (cleaning.data$diag_1>= 240 & cleaning.data$diag_1 <= 279 & cleaning.data$diag_1!= 250) | 
+                                                                                 (cleaning.data$diag_1>= 680 & cleaning.data$diag_1 <= 709 | cleaning.data$diag_1 == 782) | (cleaning.data$diag_1>= 001 & cleaning.data$diag_1<= 139),'Neoplasms', 'Other')))))))))
+```
+
+## diagnosis_2
+```{r}
+
+cleaning.data$diag_2= as.factor(ifelse((cleaning.data$diag_2 >=390 & cleaning.data$diag_2 <= 459) | cleaning.data$diag_2 == 785, 'Circulatory',
+                              ifelse((cleaning.data$diag_2 >=460 & cleaning.data$diag_2 <= 519) | cleaning.data$diag_2 == 786, 'Respiratory',
+                                     ifelse((cleaning.data$diag_2 >= 520 & cleaning.data$diag_2 <= 579) | cleaning.data$diag_2 == 787, 'Digestive',
+                                            ifelse(cleaning.data$diag_2 >= 250 & cleaning.data$diag_2 < 251, 'Diabetes',
+                                                   ifelse(cleaning.data$diag_2 >= 800 & cleaning.data$diag_2 <=999, 'Injury',
+                                                          ifelse(cleaning.data$diag_2>=710 & cleaning.data$diag_2 <= 739, 'Musculoskeletal',
+                                                                 ifelse((cleaning.data$diag_2>= 580 & cleaning.data$diag_2 <= 629) | cleaning.data$diag_2 == 788, 'Genitourinary',
+                                                                        ifelse((cleaning.data$diag_2>= 140 & cleaning.data$diag_2 <= 239) | cleaning.data$diag_2 == 780 | cleaning.data$diag_2 == 781 | cleaning.data$diag_2 == 784 |
+                                                                                 (cleaning.data$diag_2>= 790 & cleaning.data$diag_2 <= 799) | (cleaning.data$diag_2 >= 240 & cleaning.data$diag_2 <= 279 & cleaning.data$diag_2!= 250) | 
+                                                                                 (cleaning.data$diag_2>= 680 & cleaning.data$diag_2 <= 709 | cleaning.data$diag_2 == 782) | (cleaning.data$diag_2>= 001 & cleaning.data$diag_2<= 139),'Neoplasms', 'Other')))))))))
+```
+
+
+## diagnosis_3
+```{r}
+
+cleaning.data$diag_3= as.factor(ifelse((cleaning.data$diag_3 >=390 & cleaning.data$diag_3 <= 459) | cleaning.data$diag_3 == 785, 'Circulatory',
+                              ifelse((cleaning.data$diag_3 >=460 & cleaning.data$diag_3 <= 519) | cleaning.data$diag_3 == 786, 'Respiratory',
+                                     ifelse((cleaning.data$diag_3 >= 520 & cleaning.data$diag_3 <= 579) | cleaning.data$diag_3 == 787, 'Digestive',
+                                            ifelse(cleaning.data$diag_3 >= 250 & cleaning.data$diag_3 < 251, 'Diabetes',
+                                                   ifelse(cleaning.data$diag_3 >= 800 & cleaning.data$diag_3 <=999, 'Injury',
+                                                          ifelse(cleaning.data$diag_3 >=710 & cleaning.data$diag_3 <= 739, 'Musculoskeletal',
+                                                                 ifelse((cleaning.data$diag_3 >= 580 & cleaning.data$diag_3 <= 629) | cleaning.data$diag_3 == 788, 'Genitourinary',
+                                                                        ifelse((cleaning.data$diag_3 >= 140 & cleaning.data$diag_3 <= 239) | cleaning.data$diag_3 == 780 | cleaning.data$diag_3 == 781 | cleaning.data$diag_3 == 784 |
+                                                                                 (cleaning.data$diag_3 >= 790 & cleaning.data$diag_3 <= 799) | (cleaning.data$diag_3 >= 240 & cleaning.data$diag_3 <= 279 & cleaning.data$diag_3 != 250) | 
+                                                                                 (cleaning.data$diag_3 >= 680 & cleaning.data$diag_3 <= 709 | cleaning.data$diag_3 == 782) | (cleaning.data$diag_3 >= 001 & cleaning.data$diag_3 <= 139),'Neoplasms', 'Other')))))))))
+```
+
+
+# num_lab_procedures
+```{r}
+cleaning.data$num_lab_procedures=(ifelse(cleaning.data$num_lab_procedures>= 70,'Long',
+                                ifelse(cleaning.data$num_lab_procedures>=30 & cleaning.data$num_lab_procedures < 70, 'Medium',
+                                       ifelse(cleaning.data$num_lab_procedures>=0 & cleaning.data$num_lab_procedures<30, 'less',cleaning.data$num_lab_procedures))))
+```
+
+
+# num_procedures
+```{r}
+cleaning.data$num_procedures=(ifelse(cleaning.data$num_procedures>= 4,'Long',
+                                ifelse(cleaning.data$num_procedures>=2 & cleaning.data$num_procedures < 4, 'Medium',
+                                       ifelse(cleaning.data$num_procedures>=0 & cleaning.data$num_procedures<2, 'less',cleaning.data$num_procedures))))
+```
+
+
+# number_inpatient
+```{r}
+cleaning.data$number_inpatient=(ifelse(cleaning.data$number_inpatient>4,'High',
+                              ifelse(cleaning.data$number_inpatient>=2 & cleaning.data$number_inpatient <= 4, 'Medium',
+                                     ifelse(cleaning.data$number_inpatient>=1 & cleaning.data$number_inpatient<=2, 'less',
+                                         'None'))))
+```
+
+# number_outpatient
+```{r}
+cleaning.data$number_outpatient=(ifelse(cleaning.data$number_outpatient>= 4,'High',
+                               ifelse(cleaning.data$number_outpatient>=3 & cleaning.data$number_outpatient <= 4, 'Medium',
+                                      ifelse(cleaning.data$number_outpatient>=1 & cleaning.data$number_outpatient<=2, 'less',
+                                             ifelse(cleaning.data$number_outpatient==0, 'veryLow',cleaning.data$number_outpatient)))))
+```
+
+
+# number_emergency
+```{r}
+cleaning.data$number_emergency=(ifelse(cleaning.data$number_emergency== 0,'Highly_Emergency',
+                                ifelse(cleaning.data$number_emergency>=1 & cleaning.data$number_emergency <= 5, 'Medium_Emergency','Emergency')))
+table(cleaning.data$number_emergency)
+```
+
+
+# number_diagnoses
+
+```{r}
+cleaning.data$number_diagnoses=ifelse(cleaning.data$number_diagnoses>=10 & cleaning.data$number_diagnoses <= 16 ,'Less',
+                               ifelse(cleaning.data$number_diagnoses>=3 & cleaning.data$number_diagnoses <= 8, 'Medium',
+                                      ifelse(cleaning.data$number_diagnoses==9, 'High', cleaning.data$number_diagnoses)))
+table(cleaning.data$number_diagnoses)
+```
+
+
+# gender
+```{r}
+cleaning.data$gender <- (ifelse(cleaning.data$gender == "Male" , 1,0))
+table(cleaning.data$gender)
+```
+
+# time_in_hospital
+```{r}
+cleaning.data$time_in_hospital=(ifelse(cleaning.data$time_in_hospital>= 8,'GreaterThan8',
+                                       ifelse(cleaning.data$time_in_hospital>=3 & cleaning.data$time_in_hospital < 8, 'between4to8Days',
+                                              ifelse(cleaning.data$time_in_hospital>0 & cleaning.data$time_in_hospital<=2, 'lessthan2days',cleaning.data$time_in_hospital))))
+```
+
+
+
+# num_medications
+```{r}
+cleaning.data$num_medications=(ifelse(cleaning.data$num_medications>= 40,'High',
+                                ifelse(cleaning.data$num_medications>20 & cleaning.data$num_medications < 40, 'Medium',
+                                       ifelse(cleaning.data$num_medications>=0 & cleaning.data$num_medications<=20, 'less',cleaning.data$num_medications))))
+```
+
+
+```{r}
+str(cleaning.data)
+```
+
+In order to ease  the analysis of our diabetes data  we removed patient_nbr and encounter_id as these features rows are unique and their large number of various values created a lot of issues issues and provided very less predictive power. 
+
+# Removing encounter_id and patient_nbr and dropping  diag_2, diag_3 as they are secondary and tertiary diagnoses 
+```{r}
+cleaning.data <- cleaning.data %>% dplyr::select(-encounter_id, -patient_nbr,-diag_2,-diag_3)
+```
+
+We are left with 21 variables in the dataset
+
+
+
+```{r}
+str(cleaning.data)
+```
+
+```{r}
+aamer.data <- cleaning.data
+```
+
+```{r }
+character_cols = c('race','admission_source_id','time_in_hospital','num_lab_procedures','num_procedures','num_medications','number_outpatient','number_emergency','number_inpatient','number_diagnoses','max_glu_serum','A1Cresult','insulin','change', 'diabetesMed')
+
+cleaning.data[, character_cols] <- lapply(cleaning.data[, character_cols], as.factor)
+```
+
+
+
+
+```{r}
+str(cleaning.data)
+```
+
+We are going with 2 approaches for the logistic regression . one approach will involve the dummy variables for the categorical features and the second approach will involve non-dummy variables
+
+```{r}
+NoDummyVar.diabetes <- cleaning.data
+```
+
+
+```{r}
+processed.dataframe <- cleaning.data
+```
+
+
+#converting all the character columns into dummy variables
+```{r}
+#final.dataframe <- as.data.frame(unclass(processed.dataframe))
+processed.dataframe$time_in_hospital <- as.numeric(as.factor(processed.dataframe$time_in_hospital))
+processed.dataframe$num_lab_procedures <- as.numeric(as.factor(processed.dataframe$num_lab_procedures))
+processed.dataframe$num_procedures <- as.numeric(as.factor(processed.dataframe$num_procedures))
+processed.dataframe$number_outpatient <- as.numeric(as.factor(processed.dataframe$number_outpatient))
+processed.dataframe$number_inpatient <- as.numeric(as.factor(processed.dataframe$number_inpatient))
+processed.dataframe$number_emergency <- as.numeric(as.factor(processed.dataframe$number_emergency))
+processed.dataframe$number_diagnoses <- as.numeric(as.factor(processed.dataframe$number_diagnoses))
+processed.dataframe$race <- as.numeric(as.factor(processed.dataframe$race))
+processed.dataframe$num_medications <- as.numeric(as.factor(processed.dataframe$num_medications))
+# processed.dataframe$gender <- as.numeric(as.factor(processed.dataframe$gender))
+processed.dataframe$max_glu_serum <- as.numeric(as.factor(processed.dataframe$max_glu_serum))
+processed.dataframe$A1Cresult <- as.numeric(as.factor(processed.dataframe$A1Cresult))
+processed.dataframe$insulin <- as.numeric(as.factor(processed.dataframe$insulin))
+processed.dataframe$change <- as.numeric(as.factor(processed.dataframe$change))
+processed.dataframe$diabetesMed <- as.numeric(as.factor(processed.dataframe$diabetesMed))
+
+processed.dataframe$age <- as.numeric(processed.dataframe$age)
+processed.dataframe$admission_type_id <- as.numeric(processed.dataframe$admission_type_id)
+processed.dataframe$discharge_disposition_id <- as.numeric(processed.dataframe$discharge_disposition_id)
+processed.dataframe$admission_source_id <- as.numeric(processed.dataframe$admission_source_id)
+processed.dataframe$diag_1 <- as.numeric(processed.dataframe$diag_1)
+# processed.dataframe$diag_2 <- as.numeric(processed.dataframe$diag_2)
+# processed.dataframe$diag_3 <- as.numeric(processed.dataframe$diag_3)
+
+
+```
+
+```{r}
+processed.dataframe <- na.omit(processed.dataframe)
+str(processed.dataframe)
+```
+
+```{r}
+dummyVar.diabetes <- processed.dataframe
+
+```
+
+
+With the first approach , we will be creating a logistic regression model and feeding it the dummy variable diabetes data
+
+## Step 1 Creating the train and test dataset from the Dummy variable dataset
+```{r}
+
+library(caret)
+set.seed(96843)
+dummyVar.index <- createDataPartition(dummyVar.diabetes$readmitted, p = .7, list = FALSE)
+dummyVar.train <- dummyVar.diabetes[dummyVar.index,]
+dummyVar.test  <- dummyVar.diabetes[-dummyVar.index,]
+```
+
+
+```{r}
+str(dummyVar.train)
+```
+
+
+```{r}
+Dummy.glm.fit <- glm(readmitted~., dummyVar.train, family=binomial(link="logit") )
+summary(Dummy.glm.fit)
+```
+
+Using the AIC measure to find the best model for logistic regression
+```{r step function to choose lowest AIC}
+stepAIC(Dummy.glm.fit,test="Chi",direction = "both")
+```
+
+The last one is the best model with the lowest AIC 
+
+
+```{r}
+dummy.BestModel <- glm(formula = readmitted ~ gender + age + admission_type_id + 
+    discharge_disposition_id + admission_source_id + time_in_hospital + 
+    num_lab_procedures + num_procedures + num_medications + number_outpatient + 
+    number_emergency + number_inpatient + diag_1 + number_diagnoses + 
+    A1Cresult + insulin + change + diabetesMed, family = binomial(link = "logit"), 
+    data = dummyVar.train)
+```
+
+
+
+```{r}
+predict.train.Dummy <- predict(dummy.BestModel, type = 'response')
+
+```
+
+
+```{r}
+predict.test.Dummy <- predict(dummy.BestModel, newdata = dummyVar.test, type = 'response')
+```
+
+
+
+## Accuracy on the Dummy Variable test data
+```{r}
+predict.LR.test.dummy <- ifelse(predict.test.Dummy > 0.50,1,0)
+
+result.test.dummy <- as.data.frame(table(predict.LR.test.dummy,dummyVar.test$readmitted))
+
+correctPred.test.dummy <- result.test.dummy[1,3] + result.test.dummy[4,3]
+sensitivity.test.dummy <- result.test.dummy[4,3]/(result.test.dummy[2,3] + result.test.dummy[4,3])
+
+specificity.test.dummy <- result.test.dummy[1,3]/(result.test.dummy[3,3] + result.test.dummy[1,3])
+
+accuracyLR.test.dummy <- correctPred.test.dummy/nrow(dummyVar.test)
+accuracyLR.test.dummy
+
+```
+
+So the accuracy on the test data for the Dummy features of diabetes data came around '60%'
+
+We have chosen the classification bound of about 0.5 which lead to highest accuracy . I have tried some heuristic to change the threshold for probabilities and it didnt improve the accuracy even after changing the classification bound to 0.4 or 0.6 and multiple values in between .
+
+## Sensitivity on the Dummy Variable test data
+```{r}
+sensitivity.test.dummy 
+```
+
+## Specificity on the Dummy Variable test data
+```{r}
+specificity.test.dummy 
+```
+
+## Accuracy on the Dummy variable train data
+```{r}
+predict.LR.train.dummy <- ifelse(predict.train.Dummy > 0.50,1,0)
+
+result.train.dummy <- as.data.frame(table(predict.LR.train.dummy,dummyVar.train$readmitted))
+
+correctPred.train.dummy <- result.train.dummy[1,3] + result.train.dummy[4,3]
+sensitivity.train.dummy <- result.train.dummy[4,3]/(result.train.dummy[2,3] + result.train.dummy[4,3])
+
+specificity.train.dummy <- result.train.dummy[1,3]/(result.train.dummy[3,3] + result.train.dummy[1,3])
+
+accuracyLR.train.dummy <- correctPred.train.dummy/nrow(dummyVar.train)
+accuracyLR.train.dummy
+
+```
+
+Even the training data has the same accuracy of 60% on the dummy variable diabetes data
+
+
+## Sensitivity on the Dummy Variable train data
+```{r}
+sensitivity.train.dummy
+```
+
+
+## Specificity on the Dummy Variable train data
+```{r}
+specificity.train.dummy
+```
+
+
+##  Confusion matrix for the test data on the dummy variable diabetes data
+```{r}
+log.pred.test.dummy <- as.factor(predict.LR.test.dummy)
+isReadmit.test.dummy <- as.factor(dummyVar.test$readmitted)
+cfmatrix.test.dummy <- confusionMatrix(log.pred.test.dummy, isReadmit.test.dummy, positive = "1")
+cfmatrix.test.dummy
+```
+
+The proportion of correctly predicted TRUE(readmitted) to correctly predicted FALSE(not readmitted) is 6234:11585 = 0.53 which doesnt seem to be that stable. The original dataset had 45,715 rows of readmitted label and 52337 rows of not-readmitted label and the proportion was 45715/52337 = 0.87.
+So overall there is not much stability as the dataset was imbalanced. 
+
+Balancing techniques like SMOTE should have been used.
+
+
+## Confusion matrix by class for the test Dummy data
+```{r}
+
+cfmatrix.test.dummy$byClass
+```
+
+## F1 score for the test Dummy data
+```{r}
+
+cfmatrix.test.dummy$byClass['F1']
+```
+
+We were able to achieve F1 score of about 0.51 on our test dummy variable diabetes data
+
+
+
+
+##Confusion matrix on the train data for dummy variable diabetes data
+```{r}
+log.pred.train.dummy <- as.factor(predict.LR.train.dummy)
+isReadmit.train.dummy <- as.factor(dummyVar.train$readmitted)
+cfmatrix.train.dummy <- confusionMatrix(log.pred.train.dummy, isReadmit.train.dummy, positive = "1")
+cfmatrix.train.dummy
+```
+
+
+## Confusion matrix by class for train dummy variable
+```{r}
+
+cfmatrix.train.dummy$byClass
+```
+
+## F1 score or train dummy variable
+```{r}
+
+cfmatrix.train.dummy$byClass['F1']
+```
+
+We were able to achieve F1 score of about 0.52 on our train dummy variable diabetes data
+
+
+## Gains chart for our test dummy variable data
+```{r}
+library(gains)
+
+gains(as.numeric(dummyVar.test$readmitted)-1,predict.test.Dummy,10)
+```
+
+## Plotting the Gains chart
+```{r}
+plot(gains(as.numeric(dummyVar.test$readmitted)-1,predict.test.Dummy,10))
+```
+
+We see the graph monotonically decreasing as there are mostly '1s' (Yes)/readmitted in our top deciles when we are predicted the probabilities using our logistic regression model.
+
+
+
+## plotting the ROC curve and AUC curve 
+```{r}
+library(pROC)
+Dummy.roc.curve = roc(dummyVar.test$readmitted ~ predict.test.Dummy, plot = TRUE, print.auc = TRUE)
+```
+
+
+
+## Plotting just ROC curve
+```{r}
+ROCRpred.dummy <- prediction(predict.test.Dummy, dummyVar.test$readmitted)
+ROCRperf.dummy <- performance(ROCRpred.dummy, 'tpr','fpr')
+plot(ROCRperf.dummy, colorize = TRUE, text.adj = c(-0.2,1.7))
+```
+
+Now its time to try out the 2nd approach where we use Non-dummy variable data to feed into a logistic regression model 
+```{r}
+library(caret)
+set.seed(96843)
+NoDummyVar.index <- createDataPartition(NoDummyVar.diabetes$readmitted, p = .7, list = FALSE)
+NoDummyVar.train <- NoDummyVar.diabetes[NoDummyVar.index,]
+NoDummyVar.test  <- NoDummyVar.diabetes[-NoDummyVar.index,]
+```
+
+```{r}
+str(NoDummyVar.train)
+```
+
+
+```{r}
+NoDummy.glm.fit <- glm(readmitted~., NoDummyVar.train, family=binomial(link="logit") )
+summary(NoDummy.glm.fit)
+```
+
+
+Using the AIC criteria for deciding the best features for our logistic regression model
+```{r}
+stepAIC(NoDummy.glm.fit,test="Chi", direction = "both")
+```
+The last one is the best model with the lowest AIC 
+
+## Creating the best logitic regression model for our Non dummy variable diabetes data
+```{r}
+Nodummy.BestModel <- glm(formula = readmitted ~ race + gender + age + admission_type_id + 
+    discharge_disposition_id + admission_source_id + time_in_hospital + 
+    num_lab_procedures + num_procedures + num_medications + number_outpatient + 
+    number_emergency + number_inpatient + diag_1 + number_diagnoses + 
+    max_glu_serum + A1Cresult + insulin + diabetesMed, family = binomial(link = "logit"), 
+    data = NoDummyVar.train)
+```
+
+
+
+```{r}
+predict.train.NoDummy <- predict(Nodummy.BestModel, type = 'response')
+
+```
+
+
+```{r}
+predict.test.NoDummy <- predict(Nodummy.BestModel, newdata = NoDummyVar.test, type = 'response')
+```
+
+
+## Accuracy on the Non-Dummy Variable test data
+```{r}
+predict.LR.test.NoDummy <- ifelse(predict.test.NoDummy > 0.50,1,0)
+
+result.test.NoDummy <- as.data.frame(table(predict.LR.test.NoDummy,NoDummyVar.test$readmitted))
+
+correctPred.test.NoDummy <- result.test.NoDummy[1,3] + result.test.NoDummy[4,3]
+sensitivity.test.NoDummy <- result.test.NoDummy[4,3]/(result.test.NoDummy[2,3] + result.test.NoDummy[4,3])
+
+specificity.test.NoDummy <- result.test.NoDummy[1,3]/(result.test.NoDummy[3,3] + result.test.NoDummy[1,3])
+
+accuracyLR.test.NoDummy <- correctPred.test.NoDummy/nrow(NoDummyVar.test)
+accuracyLR.test.NoDummy
+
+```
+
+So the accuracy on the test data for the Dummy features of diabetes data came around '62%' which was better than the dummy variable diabetes dataset.
+
+We have chosen the classification bound of about 0.5 which lead to highest accuracy . I have tried some heuristic to change the threshold for probabilities and it didnt improve the accuracy to more than 62% even after changing the classification bound to 0.4 or 0.6 and multiple values in between .
+
+## Sensitivity on the Non-Dummy Variable test data
+```{r}
+sensitivity.test.NoDummy 
+```
+
+## Specificity on the Non-Dummy Variable test data
+```{r}
+specificity.test.NoDummy 
+```
+
+
+
+## Accuracy on the Non-Dummy variable train data
+```{r}
+predict.LR.train.NoDummy <- ifelse(predict.train.NoDummy > 0.50,1,0)
+
+result.train.NoDummy <- as.data.frame(table(predict.LR.train.NoDummy,NoDummyVar.train$readmitted))
+
+correctPred.train.NoDummy <- result.train.NoDummy[1,3] + result.train.NoDummy[4,3]
+sensitivity.train.NoDummy <- result.train.NoDummy[4,3]/(result.train.NoDummy[2,3] + result.train.NoDummy[4,3])
+
+specificity.train.NoDummy <- result.train.NoDummy[1,3]/(result.train.NoDummy[3,3] + result.train.NoDummy[1,3])
+
+accuracyLR.train.NoDummy <- correctPred.train.NoDummy/nrow(NoDummyVar.train)
+accuracyLR.train.NoDummy
+
+```
+
+Even the training data has the same accuracy of 62% on the Non-dummy variable diabetes data
+
+
+## Sensitivity on the Non-Dummy Variable train data
+```{r}
+sensitivity.train.NoDummy
+```
+
+
+## Specificity on the Dummy Variable train data
+```{r}
+specificity.train.NoDummy
+```
+
+
+
+##  Confusion matrix for the test data on the Non-dummy variable diabetes data
+```{r}
+log.pred.test.NoDummy <- as.factor(predict.LR.test.NoDummy)
+isReadmit.test.NoDummy <- as.factor(NoDummyVar.test$readmitted)
+cfmatrix.test.NoDummy <- confusionMatrix(log.pred.test.NoDummy, isReadmit.test.NoDummy, positive = "1")
+cfmatrix.test.NoDummy
+```
+
+The proportion of correctly predicted TRUE(readmitted) to correctly predicted FALSE(not readmitted) is 6241:11886 = 0.52 which doesnt seem to be that stable. The original dataset had 45,715 rows of readmitted label and 52337 rows of not-readmitted label and the proportion was 45715/52337 = 0.87 and there was no equal representation of '1s' and '0s' in the original although we tried to balance it out while partitioning .
+So overall there is not much stability as the dataset was imbalanced. 
+
+Balancing techniques like SMOTE should have been used.
+
+
+## Confusion matrix by class for the test Non- Dummy data
+```{r}
+
+cfmatrix.test.NoDummy$byClass
+```
+
+## F1 score for the test Non- Dummy data
+```{r}
+
+cfmatrix.test.NoDummy$byClass['F1']
+```
+
+We were able to achieve F1 score of about 0.536 on our test Non-dummy variable diabetes data
+
+
+
+
+##Confusion matrix on the train data for Non-dummy variable diabetes data
+```{r}
+log.pred.train.NoDummy <- as.factor(predict.LR.train.NoDummy)
+isReadmit.train.NoDummy <- as.factor(NoDummyVar.train$readmitted)
+cfmatrix.train.NoDummy <- confusionMatrix(log.pred.train.NoDummy, isReadmit.train.NoDummy, positive = "1")
+cfmatrix.train.NoDummy
+```
+
+
+## Confusion matrix by class for train Non-dummy variable
+```{r}
+
+cfmatrix.train.NoDummy$byClass
+```
+
+
+## F1 score or train Non-dummy variable
+```{r}
+
+cfmatrix.train.NoDummy$byClass['F1']
+```
+
+We were able to achieve F1 score of about 0.53 on our train dummy variable diabetes data
+
+
+## Gains chart for our test Non-dummy variable data
+```{r}
+library(gains)
+
+gains(as.numeric(NoDummyVar.test$readmitted)-1,predict.test.NoDummy,10)
+```
+
+## Plotting the Gains chart for Non-Dummy variable
+```{r}
+plot(gains(as.numeric(NoDummyVar.test$readmitted)-1,predict.test.NoDummy,10))
+```
+
+
+
+We see the graph monotonically decreasing as there are mostly '1s' (Yes)/readmitted in our top deciles when we are predicted the probabilities using our logistic regression model.
+
+
+
+## plotting the ROC curve and AUC curve for Non-Dummy variable diabetes data
+```{r}
+library(pROC)
+NoDummy.roc.curve = roc(NoDummyVar.test$readmitted ~ predict.test.NoDummy, plot = TRUE, print.auc = TRUE)
+```
+So the ared under the curve is 65% which is better compared to dummy variable logistic regression model.
+
+
+## Plotting just ROC curve
+```{r}
+ROCRpred.NoDummy <- prediction(predict.test.NoDummy, NoDummyVar.test$readmitted)
+ROCRperf.NoDummy <- performance(ROCRpred.NoDummy, 'tpr','fpr')
+plot(ROCRperf.NoDummy, colorize = TRUE, text.adj = c(-0.2,1.7))
+```
+
+
+So with our analysis we have come to a conclusion that non-dummy variable diabetes data logistic regression model performed better comapred to non-dummy variable diabetes data logistic regression model.
+
+
+## Saving the data for the decision tree model
+```{r}
+# write.csv(dummyVar.diabetes,"/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9/DummyVar_diabetes.csv")
+
+write.csv(NoDummyVar.diabetes,"/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 6 August 30/NonDummyVar_diabetes.csv")
+```
+
+
+##  Final comments :
+
+This logistic regression model delivers similar results in the both in the training and the holdout set which gives us the confidence that the logistic regression model is a substantially stable one . I am not comfortable with this classification model since it has a very bad success rate of predicting Non-readmission i.e Type 2 error or true negative error is quite high . This means that a lot of patients could be 'predicted' for non-readmission by this classification and they could end up being Readmitted in reality . 
+At the same time the sensitivity(around 45%) in less compared to the specificity(arouund 75%) which can be interpreted as only half of the patients predicted for 'Readmission' actually end up being Readmitted which is a very big health risk which could possibly lead to serious health complications or even in extreme cases lead to death.
+
+So this Logistic regression Classification model is not a reliable model.
+
+
+
+
+

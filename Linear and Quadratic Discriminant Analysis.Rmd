@@ -1,0 +1,230 @@
+---
+title: "Assignment 5 part 2"
+author: "Aamer hussain"
+date: "8/18/2020"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+```
+
+## Loading the libraries
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(caret))
+suppressMessages(library(MASS))
+```
+
+## Loading the Diabetes Non-dummy dataset
+```{r}
+NoDummyVar.diabetes <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 5 August 23/NonDummyVar_diabetes.csv", header = TRUE,stringsAsFactors = F, strip.white = TRUE, na.strings = c("NA", "?"," ","."))
+```
+
+## Partitioning the dataset
+```{r}
+library(caret)
+set.seed(96843)
+NoDummyVar.index <- createDataPartition(NoDummyVar.diabetes$readmitted, p = .7, list = FALSE)
+NoDummyVar.train <- NoDummyVar.diabetes[NoDummyVar.index,]
+NoDummyVar.test  <- NoDummyVar.diabetes[-NoDummyVar.index,]
+```
+
+```{r}
+colnames(NoDummyVar.train)
+```
+
+Removing the first column
+```{r}
+NoDummyVar.test <- NoDummyVar.test[,-c(1)]
+NoDummyVar.train <- NoDummyVar.train[,-c(1)]
+```
+
+## Fitting the LDA model to our diabetes data
+```{r}
+lda.model = lda(readmitted~.,data=NoDummyVar.train)
+```
+
+## LDA predictions on your train data
+```{r}
+lda.train.pred <- predict(lda.model)
+```
+
+## Confusion matrix for diabetes train data
+```{r}
+results.lda.train <- prop.table(table(NoDummyVar.train$readmitted, lda.train.pred$class))
+results.lda.train
+```
+
+## Calculating the accuracy of the LDA model on our train data
+```{r}
+accuracy.lda.train <- round(100*(results.lda.train[1,1] + results.lda.train[2,2]))
+accuracy.lda.train
+```
+The accuracy of the LDA model on our train data came around 62% .
+
+## Sensitivity of the LDA on train data
+```{r}
+sensitivity.lda.train <- round(100*results.lda.train[2,2]/sum(results.lda.train[2,]))
+sensitivity.lda.train
+```
+
+The sensitivity of the LDA model on the train data is 46% which is not too good.
+
+## Holdout validation
+
+```{r}
+lda.holdout.pred <- predict(lda.model, newdata = NoDummyVar.test)$class 
+```
+
+
+
+
+```{r}
+results.lda.holdout <- prop.table(table(NoDummyVar.test$readmitted, lda.holdout.pred))
+results.lda.holdout
+```
+
+
+```{r}
+accuracy.lda.holdout <- round(100*(results.lda.holdout[1,1] + results.lda.holdout[2,2]))
+accuracy.lda.holdout
+```
+The accuracy of the LDA model on our train data came around 62% which is same as the train data.
+
+## Sensitivity of the LDA on Holdout data
+```{r}
+sensitivity.lda.holdout <- round(100*results.lda.holdout[2,2]/sum(results.lda.holdout[2,]))
+sensitivity.lda.holdout
+```
+
+Again the sensitivity of the LDA model on the holdout data is 46% which is same as the train data . This indicates that our LDA model is a stable one .
+
+## Quadratic discrminant analysis on the diabetes(non dummy ) data
+
+
+## Fitting the QDA model on the diabetes train data
+```{r}
+qda.model <- qda(readmitted ~ ., data = NoDummyVar.train)
+```
+
+
+## QDA predictions on your train data
+```{r}
+qda.train.pred <- predict(qda.model)
+```
+
+## Confusion matrix for QDA results on the training data
+```{r}
+results.qda.train <- prop.table(table(NoDummyVar.train$readmitted, qda.train.pred$class))
+results.qda.train
+```
+
+
+```{r}
+accuracy.qda.train <- round(100*(results.qda.train[1,1] + results.qda.train[2,2]))
+accuracy.qda.train
+```
+The accuracy of the QDA model on the train data came around 60% which is not too good.
+
+## Sensitivity of the QDA on train data
+```{r}
+sensitivity.qda.train <- round(100*results.qda.train[2,2]/sum(results.qda.train[2,]))
+sensitivity.qda.train
+```
+The sensitivity of the LDA model on the train data is 33% which is terrible.
+
+
+## Holdout validation for QDA
+
+```{r}
+qda.holdout.pred <- predict(qda.model, newdata = NoDummyVar.test)$class 
+```
+
+
+## Confusion matrix for the QDA results on the holdout data
+```{r}
+results.qda.holdout <- prop.table(table(NoDummyVar.test$readmitted, qda.holdout.pred))
+results.qda.holdout
+```
+
+
+```{r}
+accuracy.qda.holdout <- round(100*(results.qda.holdout[1,1] + results.qda.holdout[2,2]))
+accuracy.qda.holdout
+```
+The accuracy of the LDA model on our train data came around 60% which is same as the train data.
+
+
+## Sensitivity of the LDA on Holdout data
+```{r}
+sensitivity.qda.holdout <- round(100*results.qda.holdout[2,2]/sum(results.qda.holdout[2,]))
+sensitivity.qda.holdout
+```
+The sensitivity of the LDA model on the train data is 32% which is terrible and there is 1% drop compared to the train data.
+
+
+##  How often in train data do LDA and QDA make the same prediction?
+```{r}
+lda.qda.train.matrix <- prop.table(table(lda.train.pred$class,qda.train.pred$class))
+lda.qda.train.matrix
+```
+
+## Frequency of LDA and QDA making the same prediction on the Diabetes train data
+```{r}
+round(100*(lda.qda.train.matrix[1,1] + lda.qda.train.matrix[2,2]))
+```
+
+LDA and QDA make the same prediction 84% of the time on the diabetes train data.
+
+##  How often in test data do LDA and QDA make the same prediction?
+```{r}
+lda.qda.holdout.matrix <- prop.table(table(lda.holdout.pred,qda.holdout.pred))
+lda.qda.holdout.matrix
+```
+
+## Frequency of LDA and QDA making the same prediction on the Diabetes train data
+```{r}
+round(100*(lda.qda.holdout.matrix[1,1] + lda.qda.holdout.matrix[2,2]))
+```
+
+LDA and QDA make the same prediction 83% of the time on the diabetes Holdout data.
+
+
+
+
+## Final comments :
+
+
+If we are more interested in predicting which particular patients are most likely to be readmitted, I would pick the model with the highest value for sensitivity and minimize the type 2 error(false negative) . 
+
+Hospital or health administrators could possibly can use LDA and QDA algorithm to in order to help or assist  them to see which particular patient characteristics are likely to preddict or classify a patient in the 'readmit' category. The hospital or health institutions can then implement policies or procedures or take initiatives to minimize the proportion of readmitted patients.
+
+Specificity is not major concern because type 1 error in this case does not affect the mortality of the patient i.e if a patient is wrongly classified or predicted as 'Readmitted' , he is going to admitted to hospital without any major health concern which is fine.
+
+On the other hand We are more concerned about the sensitivity of our model because it directly affects the mortality rates if the patients that were not predicted to be readmitted but actually should have been i.e type 2 error. To understand this in terms of the classfication metrics , we need to look at the sensitivity score and accuracy score of the test/train data for both LDA and QDA and then compare it.
+
+
+## Creating a comparison matrix to compare sensitivity and accuracy for both LDA and QDA
+```{r}
+compare.matrix <- matrix(1:8, nrow = 4, dimnames = list(c("Accuracy Train","Accuracy Holdout","Sensitivity Train","Sensitivity Holdout"), c("LDA","QDA")))
+compare.matrix[1,1] <- accuracy.lda.train
+compare.matrix[1,2] <- accuracy.qda.train
+compare.matrix[2,1] <- accuracy.lda.holdout
+compare.matrix[2,2] <- accuracy.qda.holdout
+compare.matrix[3,1] <- sensitivity.lda.train
+compare.matrix[3,2] <- sensitivity.qda.train
+compare.matrix[4,1] <- sensitivity.lda.holdout
+compare.matrix[4,2] <- sensitivity.qda.holdout
+compare.matrix
+```
+
+ I would choose a model that has better accuracy as well as the sensitivity . Looking at the comparison matrix , our choice is obvious that LDA outperforms QDA by a good margin in terms of accuracy , sensitivity and also both in test and train data.

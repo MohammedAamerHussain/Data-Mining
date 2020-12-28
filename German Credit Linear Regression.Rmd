@@ -1,0 +1,359 @@
+---
+title: "Assignment1 July 5"
+author: "Aamer hussain"
+date: "7/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+```
+
+## installing the packages and loading the libraries 
+## Step 1: Using the data from the Caret package in R
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(caret))
+data("GermanCredit")
+german_credit <- GermanCredit
+head(german_credit)
+head(colnames(german_credit),62)
+```
+
+```{r}
+glimpse(german_credit)
+```
+## Step 2 : Building a regression model to predict variable "Amount" as a function of other variables
+
+## Creating a linear model with 'Amount' as the dependent variable and choosing all numeric variables as predictors
+
+```{r}
+linearModel<-lm(Amount~Duration+InstallmentRatePercentage+ResidenceDuration+Age+NumberExistingCredits+NumberPeopleMaintenance,data=german_credit)
+summary(linearModel) # Check importance of different predictors using the summary of the model.
+```
+
+
+# Choosing on the numeric variables from the german credit data
+```{r}
+numeric.variables <- german_credit[,c(1,2,3,4,5,6)]
+cor(numeric.variables)    # finding the pearson correlation 
+```
+
+```{r}
+pairs(numeric.variables)  # pairing up different predictors to see if there is any correlation 
+```
+
+```{r}
+drop1(linearModel) # Using  drop1() to decide if any predictors need to be removed. Predictor with the lowest AIC score can be removed 
+```
+
+# calculating the relative importance of predictors from the linear model using relaimpo()
+```{r}
+suppressMessages(library(relaimpo))
+metrics.germanCredit<- calc.relimp(linearModel, type = c("lmg", "first", "last","betasq", "pratt"))
+metrics.germanCredit
+```
+
+
+
+#Calculating the rank of the numeric variables
+```{r}
+metrics.germanCredit.rank<-metrics.germanCredit@lmg.rank
+metrics.germanCredit.rank
+```
+
+
+## As you can see from the rank output, the order of importance of the numeric variables is as follows : Duration ,InstallmentRatePercentage  and Age with 'Amount' being the numeric variable of utmost importance as we have taken it as the outcome variable ]
+
+
+##  choosing the top 4 numeric columns which are Amount, Duration, InstallmentRatePercentage and Age
+```{r}
+credit.data <- german_credit[,c(2,1,3,5)]
+colnames(credit.data)
+```
+
+
+#splitting the data between the training and test samples
+```{r}
+train.dataset.size <- floor(0.632*nrow(credit.data))
+train.dataset.size
+set.seed(123456)  
+train_ind <- sample(seq_len(nrow(credit.data)),size = train.dataset.size) 
+
+train.dataset <- credit.data[train_ind,] 
+test.dataset <- credit.data[-train_ind,] 
+
+```
+
+#Building a linear regression model to predict Credit Amount on the training data
+
+```{r}
+model.training <- lm(Amount~Duration + InstallmentRatePercentage + Age , data=train.dataset)
+summary(model.training)
+coefficients.training <- summary(model.training)$coefficients
+rsquared.training <- summary(model.training)$r.squared
+```
+### As you can see by selecting the predictor variables Duration , InstallmentRatePercentage and Age , we were able to achieve r-square percentage of 46%
+
+# model prediction on the test dataset
+```{r}
+model.test <- predict(model.training, newdata=test.dataset)
+```
+
+```{r}
+rsquared.test <- (cor(as.vector(model.test), as.vector(test.dataset$Amount)))^2
+rsquared.test
+```
+# R-square percentage of the test sample of the german credit score data is 54% which is good.
+
+## Step 3 Repeat steps 1-3 1000 times
+```{r}
+options(warn=-1)
+final.results <- data.frame(matrix(ncol = 7, nrow = 1000))
+colnames(final.results) <- c("Intercept.Coefficients", "Duration", "InstallmentRatePercentage",
+                      "Age", "R_Squared.train",
+                      "R_Squared.holdout","Percentage.R_Squared.fall")
+set.seed(123456)
+train_indices <- replicate(1000, sample(1:nrow(credit.data), size = 0.632 * nrow(credit.data)))
+
+for (i in 1:1000)  {
+  
+  training.dataset <- german_credit[train_indices[,i], c(2,1,3,5)]
+  holdout.dataset <- german_credit[-train_indices[,i], c(2,1,3,5)]
+  model.train <- lm(Amount~Duration + InstallmentRatePercentage + Age , data=training.dataset)
+  coefficients.train <- summary(model.train)$coefficients
+  rsquared.train <- summary(model.train)$r.squared
+  holdout.model <- predict(model.train, newdata=holdout.dataset)
+  rsquared.holdout <- (cor(as.vector(holdout.model), as.vector(holdout.dataset$Amount)))^2
+  percentage.Rsquared.fall <-(rsquared.train-rsquared.holdout) /rsquared.train
+  df <- c(coefficients.train, rsquared.train, rsquared.holdout,
+          percentage.Rsquared.fall)
+  final.results[i,] <- t(df)
+}
+head(final.results)
+```
+## Step :4 Plotting the distributions of all coefficients,train R2 and holdout R2
+```{r}
+par(mfrow = c(3, 3))
+hist(final.results$Intercept.Coefficients,breaks=10, main = "Coefficients of Intercepts")
+hist(final.results$Duration, breaks=10,main = "Duration")
+hist(final.results$InstallmentRatePercentage,breaks=10, main = "Coefficients of InstallmentRatePercentage")
+hist(final.results$Age,breaks=10, main = "Coefficients of Age")
+hist(final.results$R_Squared.train, breaks=10,main = "Coefficients of R_Squared.Train")
+hist(final.results$R_Squared.holdout, breaks=10,main = "Coefficients of R_Squared.Holdout")
+hist(final.results$Percentage.R_Squared.fall,breaks=10, main = "% fall in R-squared")
+```
+
+
+## Step :5  Computing the averages of all 1000 coefficients.
+```{r}
+means.coefficients <- sapply(final.results[,1:4], mean)
+means.coefficients
+```
+## Step 6: Computing the standard deviation of all 1000 coefficients (for each beta)
+```{r}
+std.deviation.coefficients <- sapply(final.results[,1:4], sd)
+std.deviation.coefficients
+```
+## binding the means and standard deviation of the coeffcients into a single data frame 
+```{r}
+means.sdv.coefficients <- data.frame(cbind(means.coefficients, std.deviation.coefficients))
+colnames(means.sdv.coefficients) <- c("Mean.val", "StdDev.Val")
+means.sdv.coefficients
+```
+
+```{r}
+fullData.single.model<- lm(Amount~Duration + InstallmentRatePercentage + Age , data=german_credit)
+all.coefficients <- summary(fullData.single.model)$coefficients[,1]
+all.coefficients
+```
+## Step 7 : Compare average across 1000 to single model built using entire sample.
+```{r}
+compare.data <- rbind(SingleModel.EntireSample = all.coefficients,Avg.Coefficients =  means.coefficients)
+compare.data
+```
+
+## confidence interval for "Duration"
+```{r}
+CI.Duration.lower <- means.sdv.coefficients$Mean.val[2] - qnorm(0.975)*means.sdv.coefficients$StdDev.Val[2]/sqrt(1000)
+CI.Duration.higher <- means.sdv.coefficients$Mean.val[2] + qnorm(0.975)*means.sdv.coefficients$StdDev.Val[2]/sqrt(1000)
+ConfInt.Duration <- data.frame(cbind(CI.Duration.lower,CI.Duration.higher))
+colnames(ConfInt.Duration) <- c("lower.limit","upper.limit")
+rownames(ConfInt.Duration) <- "CI.Duration"
+ConfInt.Duration
+```
+## confidence interval for "InstallmentRatePercentage"
+```{r}
+CI.InstallmentRatePercentage.lower <- means.sdv.coefficients$Mean.val[3] - qnorm(0.975)*means.sdv.coefficients$StdDev.Val[3]/sqrt(1000)
+CI.InstallmentRatePercentage.higher <- means.sdv.coefficients$Mean.val[3] + qnorm(0.975)*means.sdv.coefficients$StdDev.Val[3]/sqrt(1000)
+ConfInt.InstallmentRatePercentage <- data.frame(cbind(CI.InstallmentRatePercentage.lower,CI.InstallmentRatePercentage.higher))
+colnames(ConfInt.InstallmentRatePercentage) <- c("lower.limit","upper.limit")
+rownames(ConfInt.InstallmentRatePercentage) <- "CI.InstallmentRatePercentage"
+ConfInt.InstallmentRatePercentage
+```
+## confidence interval for "Age"
+```{r}
+CI.Age.lower <- means.sdv.coefficients$Mean.val[4] - qnorm(0.975)*means.sdv.coefficients$StdDev.Val[4]/sqrt(1000)
+CI.Age.higher <- means.sdv.coefficients$Mean.val[4] + qnorm(0.975)*means.sdv.coefficients$StdDev.Val[4]/sqrt(1000)
+ConfInt.Age <- data.frame(cbind(CI.Age.lower,CI.Age.higher))
+colnames(ConfInt.Age) <- c("lower.limit","upper.limit")
+rownames(ConfInt.Age) <- "CI.Age"
+ConfInt.Age
+```
+## confidence interval for "Intercept"
+```{r}
+CI.Intercept.lower <- means.sdv.coefficients$Mean.val[1] - qnorm(0.975)*means.sdv.coefficients$StdDev.Val[1]/sqrt(1000)
+CI.Intercept.higher <- means.sdv.coefficients$Mean.val[1] + qnorm(0.975)*means.sdv.coefficients$StdDev.Val[1]/sqrt(1000)
+ConfInt.Intercept <- data.frame(cbind(CI.Intercept.lower,CI.Intercept.higher))
+colnames(ConfInt.Intercept) <- c("lower.limit","upper.limit")
+rownames(ConfInt.Intercept) <- "CI.Intercept"
+ConfInt.Intercept
+```
+
+
+```{r}
+CI.dataframe.scaled <-data.frame(matrix(nrow = 4, ncol = 2))
+colnames(CI.dataframe.scaled) <- c("CI.lower.limit", "CI.upper.limit")
+rownames(CI.dataframe.scaled) <- c("Intercept","Duration",
+                                "InstallmentRatePercentage",
+                                "Age")
+                                
+```
+
+
+## Scaling the Confidence Interval
+```{r}
+CI.dataframe.scaled[1:4,] <- rbind(ConfInt.Intercept, ConfInt.Duration, ConfInt.InstallmentRatePercentage, ConfInt.Age)
+CI.dataframe.scaled[,1] <- CI.dataframe.scaled[,1]*(0.632^0.5)
+CI.dataframe.scaled[,2] <- CI.dataframe.scaled[,2]*(0.632^0.5)
+CI.dataframe.scaled
+```
+
+```{r}
+CI.dataframe.entireSample <-data.frame(matrix(nrow = 4, ncol = 2))
+colnames(CI.dataframe.entireSample) <- c("CI.lowerLimit.entireSample", "CI.upperLimit.entireSample")
+rownames(CI.dataframe.entireSample) <- c("Intercept","Duration",
+                                "InstallmentRatePercentage",
+                                "Age")
+                               
+```
+
+```{r}
+summary(fullData.single.model)
+```
+
+## confidence interval of "Intercept" for the 'Entire sample'
+```{r}
+CI.Intercept.lower.entireSample <- coef(summary(fullData.single.model))[,1][1] - qnorm(0.975)*coef(summary(fullData.single.model))[,1][1]/sqrt(1000)
+CI.Intercept.higher.entireSample <- coef(summary(fullData.single.model))[,1][1] + qnorm(0.975)*coef(summary(fullData.single.model))[,1][1]/sqrt(1000)
+ConfInt.Intercept.entireSample <- data.frame(cbind(CI.Intercept.lower.entireSample,CI.Intercept.higher.entireSample))
+colnames(ConfInt.Intercept.entireSample) <- c("lower.lim.entireSample","upper.lim.entireSample")
+rownames(ConfInt.Intercept.entireSample) <- "CI.Intercept.entireSample"
+ConfInt.Intercept.entireSample
+```
+## confidence interval of "Duration" for the 'Entire sample'
+```{r}
+CI.Duration.lower.entireSample <- coef(summary(fullData.single.model))[,1][2] - qnorm(0.975)*coef(summary(fullData.single.model))[,1][2]/sqrt(1000)
+CI.Duration.higher.entireSample <- coef(summary(fullData.single.model))[,1][2] + qnorm(0.975)*coef(summary(fullData.single.model))[,1][2]/sqrt(1000)
+ConfInt.Duration.entireSample <- data.frame(cbind(CI.Duration.lower.entireSample,CI.Duration.higher.entireSample))
+colnames(ConfInt.Duration.entireSample) <- c("lower.lim.entireSample","upper.lim.entireSample")
+rownames(ConfInt.Duration.entireSample) <- "CI.Duration.entireSample"
+ConfInt.Duration.entireSample
+```
+## confidence interval of "InstallmentRatePercentage" for the 'Entire sample'
+```{r}
+CI.InstallmentRatePercentage.lower.entireSample <- coef(summary(fullData.single.model))[,1][3] - qnorm(0.975)*coef(summary(fullData.single.model))[,1][3]/sqrt(1000)
+CI.InstallmentRatePercentage.higher.entireSample <- coef(summary(fullData.single.model))[,1][3] + qnorm(0.975)*coef(summary(fullData.single.model))[,1][3]/sqrt(1000)
+ConfInt.InstallmentRatePercentage.entireSample <- data.frame(cbind(CI.InstallmentRatePercentage.lower.entireSample,CI.InstallmentRatePercentage.higher.entireSample))
+colnames(ConfInt.InstallmentRatePercentage.entireSample) <- c("lower.lim.entireSample","upper.lim.entireSample")
+rownames(ConfInt.InstallmentRatePercentage.entireSample) <- "CI.InstallmentRatePercentage.entireSample"
+ConfInt.InstallmentRatePercentage.entireSample
+```
+## confidence interval of "Age" for the 'Entire sample'
+
+```{r}
+CI.Age.lower.entireSample <- coef(summary(fullData.single.model))[,1][4] - qnorm(0.975)*coef(summary(fullData.single.model))[,1][4]/sqrt(1000)
+CI.Age.higher.entireSample <- coef(summary(fullData.single.model))[,1][4] + qnorm(0.975)*coef(summary(fullData.single.model))[,1][4]/sqrt(1000)
+ConfInt.Age.entireSample <- data.frame(cbind(CI.Age.lower.entireSample,CI.Age.higher.entireSample))
+colnames(ConfInt.Age.entireSample) <- c("lower.lim.entireSample","upper.lim.entireSample")
+rownames(ConfInt.Age.entireSample) <- "CI.Age.entireSample"
+ConfInt.Age.entireSample
+```
+
+```{r}
+CI.dataframe.entireSample[1:4,] <- rbind(ConfInt.Intercept.entireSample, ConfInt.Duration.entireSample, ConfInt.InstallmentRatePercentage.entireSample, ConfInt.Age.entireSample)
+CI.dataframe.entireSample
+```
+
+
+# values from the scaled Confidence interval 
+```{r}
+CI.dataframe.scaled
+```
+
+```{r}
+CI.dataframe.entireSample$range <- CI.dataframe.entireSample$CI.lowerLimit.entireSample -
+                          CI.dataframe.entireSample$CI.upperLimit.entireSample
+CI.dataframe.entireSample
+```
+
+```{r}
+CI.dataframe.entireSample$range <- CI.dataframe.entireSample$CI.lowerLimit.entireSample -
+                          CI.dataframe.entireSample$CI.upperLimit.entireSample
+CI.dataframe.entireSample
+```
+
+```{r}
+CI.dataframe.scaled$range.enterSample <- CI.dataframe.scaled$CI.lower.limit -
+                          CI.dataframe.scaled$CI.upper.limit
+CI.dataframe.scaled
+```
+
+```{r}
+range.compare <- cbind(CI.dataframe.scaled[,3],CI.dataframe.entireSample[,3])
+range.compare
+```
+### Comparing the range of the Confidence Intervals
+```{r}
+rownames(range.compare) <- rownames(CI.dataframe.scaled)
+colnames(range.compare) <- c("ScaledData.Range","EntireSample.Range")
+range.compare
+```
+## step 9 : Summarizing the results
+
+#Model Building:
+
+In the first step , After running the step wise regression method for the selection of appropriate predictor variabls for our credit scoring analysis , we finalized the inclusion of duration , InstallmentRatePercentage and Age with "Amount" being the final outcome variable.
+
+With the above mentioned predictor variables , we were able to achieve 46% r-square for the train sample and 54% for the test sample which means these 3 predictor variables accounted for almost 50% of the variance of the german credit data sample.
+
+Half the variance in the credit Amount can be explained with only 3 variables.
+
+#Repeated Model Building exercise:
+
+With this particular excercise what we tried doing is that we epeatedly built the linear model with 3 predictors in order to predict Amount in the dataset with different training sets through multiple iterations and repeated sampling, then showed that the data followed Central Limit Theorem indicated by the distribution plot , mean and standard deviation values.
+
+After running linear model 1000 times with different random sample partition, I got the distribution plot, mean, sd as well as the CI for all coefficients, r.squared.training and r.squared.testing. From the plot, I can tell each parameter following central limit theorem and its distribution is approxmimately normal.  
+
+All of the coefficients of intercepts, Duration, InstallmentRatePercentage and age  showed a normal distribution, which was to be expected because we repeately resampled the data and built the same model using the same predictors.
+
+#Comparing the confidence intervals:
+We can clearly see that the bands of the scaled Conf intervals are much tighter or narrower while the bands of the full model(entire sample ) are much broader .  
+
+
+We  achieved 2 different confidence intervals through different methods. We saw that by running entire sample dataset on the linear model , we got the  confidence intervals that was more wider. By running the linear model 1000 times, re-sampling over and over again and by using the average of the coefficients, we achieved a tighter set of conf interval bounds. By scaling these CIs to of the training set size i.e 632, we got even more tighter bounds on CIs. This makes a lot of sense because when you run the model multiple times , we can be assured that our distribution will smooth out leading to our linear model being less overfit  and approach the  true probability distribution around the mean. 
+
+
+#Final Comments:
+This exercise or method is a very insightul approach and is aligned with the bootstrap approach which dramtically reduces the variance. 
+The significance of this approach is that it not only impacts 'means' but  also on the coefficients in
+the linear model and  errors term. With this method Errors would be normally distributed which will prevent overfitting and would help  us run all sorts of different models.

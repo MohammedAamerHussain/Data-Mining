@@ -1,0 +1,672 @@
+---
+title: "Assignment 2 July 12"
+author: "Aamer hussain"
+date: "7/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+install.packages("mclust", repos = "http://cran.us.r-project.org")
+install.packages("fpc", repos = "http://cran.us.r-project.org")
+
+
+```
+
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(mclust))
+suppressMessages(library(caret))
+suppressMessages(library("fpc"))
+suppressMessages(library(corrr))
+suppressMessages(library(gridExtra))
+suppressMessages(library(DT))
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+#suppressMessages(library(MASS))
+suppressMessages(library(glmnet))
+suppressMessages(library(ggplot2))
+suppressMessages(library(PerformanceAnalytics))
+suppressMessages(library(tidyverse))
+```
+
+Using the Boston housing data from the 'mlbench' library
+
+```{r}
+library('mlbench')
+data(BostonHousing)
+head(BostonHousing)
+
+```
+
+This Boston housing dataset frame has 14 columns and 506 rows
+
+Description about the columns in the boston housing dataset are as follows:
+
+
+    crim - crime rate by every town in boston suburbs
+    lstat - percentage  of the population having lower status.
+    zn - over 25,000 sq.ft  proportion of land zoned for lots
+    tax - property tax 
+    indus - industries acres per town.
+    rm -  number of rooms per house
+    nox -  concentration  of nitrogen oxides - parts per 10 million .
+    black/b  - 1000(0.63 - Bk)^2 where Bk is the proportion of black population by town.
+    age - proportion of units that were built prior to 1940.
+    rad -  accessibility index to radial highways.
+    dis - weighted mean of dist to top 5 employment centres in Boston.
+    chas - Dummy variable for vicinity to Charles River (= 1 if tract bounds river; 0 otherwise).
+    ptratio - pupil to teacher ratio by each town.
+    
+    
+    
+
+
+converting the Boston housing variable to a data frame
+```{r}
+Boston.data <- data.frame(BostonHousing)
+```
+
+```{r}
+head(Boston.data)
+```
+
+
+```{r}
+colnames(str(Boston.data))
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+summary(Boston.data)
+```
+
+
+Checking for the Null Values for all the variables
+
+```{r}
+colSums(is.na(Boston.data))
+```
+We see that there are no null values  in the data
+
+Checking for duplicate values
+```{r}
+
+sum(duplicated(Boston.data))
+```
+## Selecting only the numerical variables 
+
+# removing chas and rad variables as they are categorical 
+```{r}
+boston.dataframe <- Boston.data[,-c(4,9)]
+```
+
+Correlational plot
+```{r}
+require(corrplot)
+
+
+corrplot(cor(boston.dataframe), method = "number", type = "upper", diag = FALSE)
+```
+
+Observations from the correlational matrix :
+
+MEDV(median value) of homes rises as 'rm'(number of rooms per house) increases and it decreases if percentage of 'LSAT' (lower status population in that area) increases
+NOX(concentration of nitrogen oxides (ppm)) increases with increase in 'indus'(industries) and the 'age' of the house that were built prior to 1940.
+'rad'(radial highways) and 'tax' have a very strong positive correlation  which indicates that as accessibility of the houses to highways increases, property-tax rate also increases.
+At the same time 'crim' (crime rate) is strongly correlated with 'rad' and 'tax' which implies that as the accessibility to the  highways increases, crime rate also increases.
+zn(non retail business acres) also seems to have a very  strong  correlation with 'nox', which supports the narrative that as the concentration of nitrogen oxides goes high in those areas because of more public gatherng arund those areas.
+
+
+
+## Histogram
+```{r}
+ggplot(gather(boston.dataframe), aes(value)) + 
+  geom_histogram(bins = 10) + 
+  facet_wrap(~key, scales = 'free_x')+
+  theme_gray()+
+  ggtitle("Histogram of the Boston housing Data variables ")
+```
+
+
+We have chosen the variable "medv" as the outcome variable or the dependent variable and the rest of the variables as independent variables
+```{r}
+boston.dataframe %>% gather(key, val, -medv) %>%
+  ggplot(aes(x = val, y = medv)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = TRUE, col = "red") +
+  facet_wrap(~key, scales = "free") +
+  theme_gray() +
+  ggtitle("Scatter plot of all independent variables vs  MEDV(median Value) ") 
+```
+## Box plots
+```{r}
+boxplot(boston.dataframe, col = "grey")
+```
+
+
+```{r}
+plot(boston.dataframe,pch=3)
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+## Building a linear model 
+
+
+We will be building up a full Linear regression model that includes all variables against MEDV as the target variable
+
+```{r}
+full.model <- lm(medv~ ., data = boston.dataframe)
+summary.full.model <- summary(full.model)
+summary.full.model
+```
+
+
+It is noticed that 'Indus' and 'age' have a  higher p-value and they seem to be not that significant
+
+
+We can use drop1() to decide if any predictors need to be removed. Predictor with the lowest AIC score can be removed
+```{r}
+drop1(full.model) # Using  
+```
+
+Based on the results, it looks like crim,zn, indus, age, tax, b could be excluded from the clustering analysis.
+
+
+The next step would be to do step wise regressional analysis for variable selection
+## Step wise regression for variable selection 
+```{r}
+# building a null model with only the intercept as the predictor
+null.model <- lm(medv ~ 1, data = boston.dataframe)
+
+#forward selection
+forward.stepwise.reg <- step(null.model, scope = list(lower = null.model, upper = full.model), direction = "forward")
+```
+With this step , we have come to know that the order of significance of the predictors is as follows :
+
+lstat -> rm -> ptratio ->  dis ->  nox -> b -> zn -> crim
+
+
+Now we have to do the backward selection using step wise regression
+```{r}
+#Backward selection
+backward.stepwise.reg <- step(full.model, direction = "backward")
+
+```
+In  the ascending order , the significance is as follows :
+crim -> zn -> nox -> rm -> dis -> ptratio -> b -> lstat
+
+```{r}
+#stepwise selection
+stepwise.selection.model <- step(null.model, scope = list(lower = null.model, upper = full.model), direction = "both")
+
+```
+All the variables are insignificant except lsat, rm, dis and ptratio
+
+
+```{r}
+suppressMessages(library(relaimpo))
+metrics.Boston.housing<- calc.relimp(full.model, type = c("lmg", "first", "last","betasq", "pratt"))
+metrics.Boston.housing
+```
+
+Calculating the rank from the relative importance function for our predictors
+```{r}
+metrics.BostonHousing.rank<-metrics.Boston.housing@lmg.rank
+metrics.BostonHousing.rank
+```
+
+From this ranking , we can finalize on using medv, lsat, rm for our clustering analysis
+
+Correlation of each independent variable with the dependent variable
+
+```{r}
+suppressMessages(library(caret))
+
+cor(boston.dataframe, boston.dataframe$medv)
+```
+Correlational analysis also gives the exact same results
+
+
+
+We observe that the no of rooms 'rm' has the strongest positive correlation with the 'medv' value of the boston housing price, while the percent of low status population i.e  'lsat' have strong negative correlation. The feature with the lowest correlation to 'medv' value is 'dis'
+
+
+
+# We will only be taking top 3 variables for the k-means clustering i.e medv , lsat and  rm
+
+```{r}
+#Boston.data[,c(14,13,6,11,5,3,10)]
+final.housingdata <- Boston.data[,c(14,13,6)]
+final.housingdata
+```
+
+
+# Step  : splitting the data between the training and test samples
+```{r}
+train.dataset.size <- floor(0.70*nrow(final.housingdata))
+train.dataset.size
+set.seed(123456)   
+train_ind <- sample(seq_len(nrow(final.housingdata)),size = train.dataset.size)  
+
+train.dataset <- final.housingdata[train_ind,]
+test.dataset <- final.housingdata[-train_ind,]  
+
+```
+
+## Step : 2 Scaling both the train and test data 
+```{r}
+
+train.scaled.data <- scale(train.dataset)
+test.scaled.data <- scale(test.dataset, 
+                       center = colMeans(train.dataset), 
+                       scale = apply(train.dataset,2,sd))
+```
+
+
+# Step 3: generating the k-means solution for the scaled train data for k = 2:10 clusters
+```{r}
+
+for (i in 2:10) {
+  train.temp <- paste("KmeansTrainCluster.", i, sep = "")
+  assign(train.temp, kmeans(train.scaled.data, i, nstart = 120))
+}
+
+ # calculating the between sum of squares
+KmeansTrainCluster.btwss <- c(KmeansTrainCluster.2$betweenss, KmeansTrainCluster.3$betweenss, KmeansTrainCluster.4$betweenss, 
+                     KmeansTrainCluster.5$betweenss, KmeansTrainCluster.6$betweenss, KmeansTrainCluster.7$betweenss, 
+                     KmeansTrainCluster.8$betweenss, KmeansTrainCluster.9$betweenss, KmeansTrainCluster.10$betweenss)
+
+
+
+ # Calculating the total sum of squares 
+KmeansTrainCluster.totss <- c(KmeansTrainCluster.2$totss, KmeansTrainCluster.3$totss, KmeansTrainCluster.4$totss, KmeansTrainCluster.5$totss,
+                  KmeansTrainCluster.6$totss, KmeansTrainCluster.7$totss, KmeansTrainCluster.8$totss, KmeansTrainCluster.9$totss,
+                  KmeansTrainCluster.10$totss)
+```
+
+## Step 4 :Performing  Scree tests to choose appropriate number of k-means clusters for our boston housing data
+
+# Analysing the Variance Accounted For(VAF) of different clusters
+
+```{r}
+KmeansTrainCluster.vaf <- as.matrix(KmeansTrainCluster.btwss / KmeansTrainCluster.totss)
+
+
+rownames(KmeansTrainCluster.vaf) <- paste("KmeansTrainCluster.", 2:10, sep = "")
+colnames(KmeansTrainCluster.vaf) <- "VAF"
+
+KmeansTrainCluster.vaf
+
+```
+
+
+## step 5 : Showing the scree plot
+```{r}
+par(mfrow=c(1,1))
+plot(2:10, KmeansTrainCluster.vaf[1:9, 1], main = "Scree Plot for Kmeans Clustering scaled Train data", 
+     xlab = "Number of k-means Clusters", ylab = "VAF", type = "l", col = "11")
+```
+As you can see that the elbow method points out 3 clusters as the optimal solution to handle this train data on Boston Housing
+
+## Step 6:
+
+
+# analyzing the centres of different clusters from 2:10 of the training data 
+```{r}
+
+KmeansTrainCluster.centers <- list(KmeansTrainCluster.2$centers, KmeansTrainCluster.3$centers, KmeansTrainCluster.4$centers, 
+                                KmeansTrainCluster.5$centers, KmeansTrainCluster.6$centers, KmeansTrainCluster.7$centers, 
+                                KmeansTrainCluster.8$centers, KmeansTrainCluster.9$centers, KmeansTrainCluster.10$centers)
+
+KmeansTrainCluster.centers
+```
+
+
+# generating the k-means solution for the scaled test/holdout data for k = 2:10 clusters
+```{r}
+
+for (i in 2:10) {
+  temp.test <- paste("KmeansTestCluster.", i, sep = "")
+  assign(temp.test, kmeans(test.scaled.data, 
+                          centers = KmeansTrainCluster.centers[[i - 1]], i))
+}
+
+KmeansTestCluster.btwss <- c(KmeansTestCluster.2$betweenss, KmeansTestCluster.3$betweenss, 
+                       KmeansTestCluster.4$betweenss, KmeansTestCluster.5$betweenss, 
+                       KmeansTestCluster.6$betweenss, KmeansTestCluster.7$betweenss,
+                       KmeansTestCluster.8$betweenss, KmeansTestCluster.9$betweenss, 
+                       KmeansTestCluster.10$betweenss)
+KmeansTestCluster.totss <- c(KmeansTestCluster.2$totss, KmeansTestCluster.3$totss, KmeansTestCluster.4$totss, 
+                       KmeansTestCluster.5$totss, KmeansTestCluster.6$totss, KmeansTestCluster.7$totss, 
+                       KmeansTestCluster.8$totss, KmeansTestCluster.9$totss, KmeansTestCluster.10$totss)
+```
+
+
+```{r}
+
+KmeansTestCluster.VAF <- as.matrix(KmeansTestCluster.btwss / KmeansTestCluster.totss)
+rownames(KmeansTestCluster.VAF) <- paste("KmeansTestCluster.", 2:10, sep = "")
+colnames(KmeansTestCluster.VAF) <- "VAF"
+KmeansTestCluster.VAF
+
+```
+
+# scree plot for test data
+```{r}
+par(mfrow=c(1,1))
+plot(2:10, KmeansTestCluster.VAF[1:9, 1], main = "Scree Plot for Kmeans Clustering Test data",
+     xlab = "Number of Clusters", ylab = "VAF", type = "l", col = "11")
+
+```
+Again the 3 cluster solution for the test/holdout data stands out similar to the kmeans solution we got from the train data 
+
+
+
+## Step # 7: Generating 3-5 Gaussian Mixtures (GM) on the Boston housing data  
+
+Using the 'MCLUST' package to create Gaussian mixtures
+```{r}
+# performing the EM(expectation-maximization algorithm on the scaled train data that we used to create k-means clusters)
+result.gmm<- Mclust(train.scaled.data, G=3:5)
+result.gmm
+```
+```{r}
+nrow(train.scaled.data)
+```
+
+```{r}
+summary(result.gmm)
+```
+
+Out of 354 rows of our training data , the GMM model placed 146 data points in mixture 1 followed by 18 data points in mixture 2, 58 data points in mixture 3 , 43 data points in mixture 4 and 89 data points in mixture 5
+
+
+The 'G' parameter of the mclust object will give us the optimal number of mixtures in GMM model 
+```{r}
+result.gmm$G
+```
+In this case 5 seems to be the optimal solution
+
+
+```{r}
+result.gmm$modelName
+```
+VEV model means the mixtures have been created in equal ellipsoidal shape
+
+
+Mclust uses a particular identifier for each  parameter of  covariance matrix that has only 3 letters: 
+E = "equal", 
+V = "variable" 
+I = "coordinate axes".
+
+The 1st id refers to volume, the 2nd id refers to shape and the third 3rd one refers to orientation. For example:
+
+EEE is interpreted as the 'G' clusters have same volume, shape,  orientation in the p−dim space.
+VEI indicates  volume is variable,  shape is same and the orientation equal to the coordinate axes.
+EIV denotes  same volume, a spherical shape and that the orientation is variable.
+```{r}
+result.gmm$BIC
+```
+As you can under the VEV model section , the BIC value for the 5 mixture solution seems to be the highest i.e -2135.730
+
+
+Mclust package has created 5 gaussian mixtures on our scaled training data and these clusters are of equal ellipsoidal shape. 
+Mixtures in GMM are similar to clusters in k-means
+
+
+
+
+Plotting the BIC values for all the gaussian mixtures
+```{r}
+plot(result.gmm, what = "BIC")
+```
+Again we observe that VEV(ellipsoidal shape) model with 5 mixtures has the highest value of BIC 
+
+
+```{r}
+result.gmm$parameters
+```
+
+So this 'parameters' parameter of the MCLUST object gives us a lot of information to interpret the gaussian mixtures 
+
+
+now lets look at the 'mean' values of 5 different gaussian mixtures created by the mclust package
+```{r}
+result.gmm$parameters$mean
+```
+
+## Step 8 : Summarizing results and interpret the clusters/segments in 'GMM' final solution.
+
+Mixture 1 seems to have very -ve low values for all the variables 'rm','lsat' and 'medv' . This mixture contains houses that are owned by LOWER MIDDLE CLASS
+
+Mixture 2 seems to have +ve  high values for 'medv' and 'rm' and -ve value for 'lsat' which means highly affluent people(financialy well off) live in these kind of houses. This mixture contains houses that are owned by RICH PEOPLE or UPPER CLASS
+
+Mixture 3 seems to have +ve  low values for 'medv' and 'rm' and relatively -ve  value for 'lsat' which means people who make relatively good income live in these kind of houses. This mixture contains houses that are owned by UPPER MIDDLE CLASS families
+
+Mixture 4 seems to have -ve  low values for 'medv' and 'rm' and high +ve value for 'lsat' which means extremely poor people live in these kind of houses. This mixture contains houses that are owned by people who live beneath the poverty level or LOWER CLASS
+
+Mixture 5 seems to have -ve  relatively low values for 'medv' and 'rm' and +ve value for 'lsat' which means people who make enough income to survive live in these kind of houses.  This mixture contains houses that are owned by WORKING CLASS families. 
+
+
+
+```{r}
+result.gmm$parameters$pro
+```
+This shows that out of 354 houses in the training data, 38% of them were owned by LOWER MIDDLE CLASS , 5% were owned by UPPER CLASS, 16% were owned by UPPER MIDDLE CLASS, 15% were owned by LOWER CLASS and 24% were owned by WORKING CLASS
+
+```{r}
+plot(result.gmm, what = "classification")
+```
+
+
+After fitting our boston housing data into the GMM mixtures using EM algorithm, it is always a good practice to measure the accuracy of clustered data. We could either use intercluster or intracluster  metrics as our measurements. it is good to have higher inter-cluster distance and lower  intra-cluster distance 
+
+We can measure these inter-cluster and intra-cluster distance using  cluster.stat from the fpc package.
+```{r}
+cs = cluster.stats(dist(train.scaled.data), result.gmm$classification)
+cs[c("within.cluster.ss","avg.silwidth")]
+```
+We use "within.cluster.ss" and "avg.silwidth" to validate the number of gaussian mixtures/clusters from the GMM method. The 'within.cluster.ss' measurement  indicates the within clusters sum of squares, and 'avg.silwidth' stands for the average silhouette width.
+
+within.cluster.ss measurement represnts how closely related data points or objects are inside the mixtures/clusters;
+If this  value is small,it means that the related objects are setup closely within the mixture.
+'avg.silwidth' is a metric that considers how closely related data points are within the gaussian mixture and how mixtures are separated from each other. The silhouette width value  ranges between  0 and  1; if this value is closer to 0 it  suggests that the data is not clustered properly.
+
+
+The results that we got from these metrics for our 5 gaussian mixture solution indicates that the data is not clustered in an ideal way.
+
+```{r}
+plot(result.gmm, what = "uncertainty")
+```
+
+```{r}
+sort(result.gmm$uncertainty, decreasing = TRUE) %>% head()
+```
+Mclust package has a functionality of doing probabilistic cluster assignment which can be quite useful as it enables us to understand and identify the data points or observations that have  low or how cluster uncertainty so that we could potentially target them to deal with them uniquely and consequently provide alternative solutions for their cluster assignment
+
+In our case, all the 6 observations all have close to 50% probability of being assigned to any of the 6  different clusters. To overcome this issue we could provide them with a combination of solutions for any 2 clusters that are nearest to each other for any given observation or we might perform  A/B testing to them andthen try to gain certain additional confidence regarding which particular cluster they seem to be aligned to the most.
+
+
+Plotting the density of the GMM clusters which indicates how dense each of those mixtures are
+```{r}
+plot(result.gmm, what = "density")
+```
+
+
+
+"mclustICL" from "mclust" package uses Integrated Complete  data Likelihood estimate for parameterized GMMs that is fitted by the EM algorithm which in turn is initialized by the model based hierarchical clustering.
+```{r}
+ICL.gmm <- mclustICL(train.scaled.data)
+summary(ICL.gmm)
+```
+
+```{r}
+plot(ICL.gmm)
+```
+
+So we finally chose to go with the GMM solutions that has 5 mixtures and VEV shape
+
+
+
+
+```{r}
+LRT <- mclustBootstrapLRT(train.scaled.data, modelName = "VEV")
+LRT
+```
+
+
+
+Our Final GMM solution of 5 mixtures and VEV model
+```{r}
+gmm.boston.housing <- Mclust(train.scaled.data, G = 5, modelNames = "VEV")
+plot(gmm.boston.housing, what = "classification")
+```
+
+## Step 8 : Comparing the chosen k-means solution with the chosen GM solution from an interpretability perspective.
+
+# final 3 cluster solution of k-means. Computing k-means clustering with k = 3
+```{r}
+
+set.seed(123)
+final.kmeans.cluster <- kmeans(train.scaled.data, centers = 3, nstart = 60)
+print(final.kmeans.cluster)
+```
+
+#  visualizing the 3 cluster solution of k-means for the boston housing data
+```{r}
+library(factoextra)
+fviz_cluster(final.kmeans.cluster, data = train.scaled.data)
+```
+
+# Generating an entire kmeans report based on the VAF scores between different clustering solutions 
+```{r}
+c <- 2:10
+
+kmeans.results <- lapply(c, function(k){
+  result <- list()
+  result$k <- k
+  kmeans.train <- kmeans(train.scaled.data, centers = k, nstart = 120)
+  result$train.VAF <- 1 - kmeans.train$tot.withinss / kmeans.train$totss
+  kmeans.holdout <- kmeans(test.scaled.data, centers = kmeans.train$centers, nstart = 120)
+  result$holdout.VAF <- 1 - kmeans.holdout$tot.withinss / kmeans.holdout$totss
+  return(list(result = result, train = kmeans.train, holdout = kmeans.holdout))
+})
+kmeans.results.summary <- data.frame( do.call(rbind,lapply(kmeans.results, function(x){x$result})) )
+
+kmeans.results.summary 
+```
+
+# cluster centre interpretations for k-means on Boston housing 
+```{r}
+kmeans.results.centers <- lapply(kmeans.results, function(x){
+  training.dataframe <- data.frame(dataset = 'train',
+                         k = x$result$k,
+                         center = rownames(x$train$centers),
+                         x$train$centers)
+  result.obj <- rbind(training.dataframe, data.frame(dataset = 'holdout',
+                                    k=x$result$k,
+                                    center = rownames(x$holdout$centers),
+                                    x$holdout$centers))
+  return(result.obj)
+  
+})
+kmeans.results.centers <- do.call(rbind, kmeans.results.centers)
+kmeans.centers.graph <- gather(kmeans.results.centers, 
+                           key = 'variable', 
+                           value = 'mean', 
+                           medv:rm, 
+                           factor_key = TRUE)
+```
+
+
+
+# Analyzing the cluster means 
+
+```{r}
+
+plot.bar <- ggplot( kmeans.centers.graph, aes(x=variable,y=mean, group = dataset, fill = dataset)) 
+plot.bar <- plot.bar + geom_col(position = 'dodge') 
+plot.bar <- plot.bar + facet_grid(k~center, labeller = label_both) 
+plot.bar <- plot.bar + coord_flip()
+plot.bar + theme(legend.position = "bottom")
+```
+
+## Step 8 : Summarizing results and interpret the clusters/segments in kmeans final solution.
+Focusing on the 3 clusters solution( k=3 in the picture - right hand side) 
+
+cluster 1/center :1  has  LOW values for 'rm'(no of rooms) and  'medv'(median value of the house) but relatively HIGH values for 'lsat'(lower status population). LOWER CLASS resides in this particular cluster.
+
+Cluster 2/center: 2 has very LOW values for all the variables i.e 'lsat', 'rm' and 'medv'. MIDDLE CLASS resides in this particular cluster.
+
+Cluster 3/Center: 3 has very high values for 'rm' and 'medv'  but very -ve or in opposite direction values for 'lsat' i.e they have high status. UPPER CLASS reside in this cluster
+
+This observation confirms our hypostheis that the families that have lower financial status(value for 'lsat'is high) tend to live in house that have low number of rooms('rm') and low value of the house ('medv')
+
+
+
+
+
+
+
+
+## Step 9 : Compare the chosen k-means solution with the chosen GM solution from an interpretability perspective.
+ 
+K-means can easily and always  be expressed as a special unique case of the GMM. In general, the Gaussian mixture is little bit more expressive about the membership of an observation  to a potential mixture which  depends on the shape of that particular mixture, not just its proximity which GMM takes it into consideration.
+
+While training a GMM with expectation-maximization algorithm could be  sensitive to the initial conditions during the start in contrast to the k-means solution. While comparing GMM to k-means, one could find a few more initial starting conditions in K-means than in GMM. 
+In particular, not only must the initial centroids be specified, but the initial covariance matrices and mixture weights must be specified also. We could potentially use many strategies but one such strategy would be to run k-means algorithm and use centroids from k-means to determine or decide the starting conditions for the GMM during initialiation.
+
+
+Model based or mixture based clustering solutions like GMMs  have their limitations. These techniques require an underlying model or pattern/distribution of the data for example gaussian mixture models have an assumption about the multivariate normality of the data, and the mixture or cluster assignment results are totally dependent upon this underlying assumption.
+
+But regardless in our boston housing data case , GMMs have performed better when compared to the K-means solution as the cluster assignment was more exclusive in terms of the social class that owns a housing unit in boston.
+
+
+Final comment:
+
+Many datasets like the boston housing dataset have a large gray area that basic clustering algorithm like k-means cannot capture  but GMM provide an efficient way to capture that gray area.
+
+We could comprehend GMMs as unique version of k-means that captures a gray area and gives confidence levels that helps in assigning an observation to any particular mixture/cluster.
+
+GMM in this case have assumed more-or-less convex mixtures, and while doing the Expectation -maximization algorithm they are likely  to fall into local maximums/minimums while training.
+
+
+In the end both k-means as well as the GMM solution performed well but did not yield desirable or accurate results that we were looking for. The drawback of the k-means solution that the segmentaion of the observartions was only in 3 groups and was strictly demarcated in terms of MIDDLE ,UPPER AND LOWER CLASS . 
+ Where as the 5 mixture GMM solution was more exclusive in terms of UPPER, UPPER MIDDLE , LOWER MIDDLE AND LOWER CLASS and the observations were segmented more accurately and appropriately . But the drawback of this GMM model was because of the issue with the probabilistic cluster assigment and inter-cluster/ Intra-cluster distance issues that we already discussed above. 
+ 
+
+ 
+## Step 10 :focus groups and other follow-up A&U (Attitudinal and Usage studies).
+
+For the attitudinal and usage studies , we could act as a real estate agency/banking finance that has been given a task to recruit 30 people per segments , we could start making calls to random people or from the phone directory and ask questions to them regarding their financial bank statments, perform credit check using SSN and get an idea about their social status so that we could determine an 'LSAT' value for them in our database which could be potentially used for clustering either by k-means or GMM.
+
+Depending upon what the cutsomer is looking for in terms of the number of rooms('rm') and the value of the house('medv') that they have a  budget for so that they can apply for the loan , we can start placing them into these segments created by the k-means or GMM. The real estate agency  or the business team could decide upon the options that they could potentially give the cutsomer about the housing units in bostons as per their guidelines and also keeping in mind the customer requirements in terms of 'no of rooms' and also the median value of the house.

@@ -1,0 +1,358 @@
+---
+title: "Assignment 3 part 2"
+author: "Aamer hussain"
+date: "7/24/2020"
+output: html_document
+---
+
+# Loading the libraries
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library(caret))
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+library(factoextra)
+library(ggbiplot)
+```
+
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+install.packages('ggfortify', repos = "http://cran.us.r-project.org")
+
+```
+
+Using the Boston housing data from the 'mlbench' library
+
+```{r}
+library('mlbench')
+data(BostonHousing)
+head(BostonHousing)
+```
+
+This Boston housing dataset frame has 14 columns and 506 rows
+
+Description about the columns in the boston housing dataset are as follows:
+
+
+    crim - crime rate by every town in boston suburbs
+    lstat - percentage  of the population having lower status.
+    zn - over 25,000 sq.ft  proportion of land zoned for lots
+    tax - property tax 
+    indus - industries acres per town.
+    rm -  number of rooms per house
+    nox -  concentration  of nitrogen oxides - parts per 10 million .
+    black/b  - 1000(0.63 - Bk)^2 where Bk is the proportion of black population by town.
+    age - proportion of units that were built prior to 1940.
+    rad -  accessibility index to radial highways.
+    dis - weighted mean of dist to top 5 employment centres in Boston.
+    chas - Dummy variable for vicinity to Charles River (= 1 if tract bounds river; 0 otherwise).
+    ptratio - pupil to teacher ratio by each town.
+    
+    
+
+
+converting the Boston housing variable to a data frame
+```{r}
+Boston.data <- data.frame(BostonHousing)
+```
+
+```{r}
+head(Boston.data)
+```
+
+```{r}
+colnames(Boston.data)
+```
+
+
+```{r}
+colnames(str(Boston.data))
+```
+
+
+## Selecting only the numerical variables 
+
+ removing chas and rad variables as they are categorical 
+```{r}
+boston.dataframe <- Boston.data[,-c(4,9)]
+```
+
+## Step : Loading the data and splitting it into train and test data
+
+
+```{r loading_splitting_data}
+train.data.index <- sample(1:nrow(boston.dataframe), size = 0.7 * nrow(boston.dataframe))
+train.data <- boston.dataframe[train.data.index,]
+test.data <- boston.dataframe[-train.data.index,]
+
+```
+
+
+
+# scaling the tarin and the test data 
+```{r}
+train.scaled.data <- scale(train.data)
+test.scaled.data <- scale(test.data, 
+                       center = colMeans(train.data), 
+                       scale = apply(train.data,2,sd))
+```
+
+
+
+
+
+## Step 2: Perform principal Component Analysis
+
+Choosing the first 7 numerical variables for principal components analysis
+```{r }
+pca.train <- princomp(train.scaled.data)
+```
+
+```{r }
+summary(pca.train)
+```
+
+# cumulative sum of the principal components
+```{r}
+cumsum(pca.train$sdev^2/sum(pca.train$sdev^2))
+```
+
+## Step 3: Generating Scree Plots
+
+Using Scree Plots to Pick the most relevant Components.
+
+```{r scree_plots}
+factoextra::fviz_screeplot(pca.train, addlabels = TRUE,
+                           barfill = "gray", barcolor = "black",
+                           ylim = c(0, 50), xlab = "Principal Component", 
+                           ylab = "Percentage of explained variance",
+                           main = "Principal Component (PC) for mixed variables")
+```
+
+
+
+There is clearly an elbow in the cumulative variance curve on the second principal component.
+If PCA technique reduces dimensionality by including only 2 components , then there is a high probablity that the predictive model created out of this would most likely be a underfit model.
+
+The overall variance plot shows that components one and two dominate contributing to around 61.9% of the data variance, and 
+the components 3-10 contribute 38.1%
+
+We need to pick up a  threshold for variance explained. 71.74% seems like 
+a good threshold for a useful analysis of this boston housing data. The first three components  seem to explain
+72% of the data variance , so we would like to use the first 3 components in our analysis.
+
+## Step 4: Plotting principal component 1 against each of the others and interpreting them.
+
+
+```{r}
+
+PCA.train <- prcomp(train.data,scale. = TRUE)
+pca.factors <- PCA.train$x
+pca.loadings <- data.frame(PCA.train$rotation)
+pca.loadings$label <- row.names(pca.loadings)
+ggplot(pca.loadings, aes(x=PC1, y=PC2)) + 
+  geom_point() + 
+  geom_text(aes(label=label))
+ggplot(pca.loadings, aes(x=PC1, y=PC3)) + 
+  geom_point() + 
+  geom_text(aes(label=label))
+ggplot(pca.loadings, aes(x=PC1, y=PC4)) + 
+  geom_point() + 
+  geom_text(aes(label=label))
+```
+```{r}
+
+library(ggfortify)
+autoplot(PCA.train, data = train.scaled.data)
+```
+
+
+## Plotting loading 1 against all of the other loadings (6 pairwise comparisons).
+
+#Plotting loading 1 against 2
+```{r}
+biplot(pca.factors[1:12,c(1,2)],pca.loadings[,c(1,2)]) 
+```
+This graph indicates that PC1 has heavy correlation between "crim", "tax", "indus","age" and "nox".
+
+PC1 seems to have correaltion between "medv" and "rm"
+
+
+#Plotting loading 1 against 3
+```{r}
+biplot(pca.factors[1:12,c(1,3)],pca.loadings[,c(1,3)]) 
+```
+The above graph indicates that PC1 has  positive correlation between "lsat", "ptratio", "nox".
+
+PC3 seems to have high correlation bwteen "dis", "rm"  and "zn".
+
+#Plotting loading 1 against 4
+
+```{r}
+biplot(pca.factors[1:10,c(1,4)],pca.loadings[,c(1,4)]) 
+```
+The above graph indicates that PC1 has positive correaltion between "indus", "crim" ,"tax" and negative correaltion between "dis", "medv", "zn"
+
+PC4 has correaltion between "lsat", "nox"
+
+
+#Plotting loading 1 against 5
+```{r}
+biplot(pca.factors[1:10,c(1,5)],pca.loadings[,c(1,5)]) 
+```
+The above graph indicates that PC1 has positive correaltion between "lsat", "nox","indus", "crim" ,"tax" and "ptratio" and negative correlation between "medv", "dis" and "rm".
+
+PC5 has some correaltion bwteen "b" and "zn"
+
+#Plotting loading 1 against 6
+```{r}
+biplot(pca.factors[1:12,c(1,6)],pca.loadings[,c(1,6)]) 
+```
+
+# Using biplots for further analysis between the first 2 components
+```{r}
+biplot.PC1.PC2 <- biplot(pca.train, choices = c(1, 2), scale = 0)
+biplot.PC1.PC2
+```
+From the Biplot PC1 vs. PC2:
+ 
+PC1 explains 49.8% of the variance and PC2 explains 12.4% of the variance. 
+
+NO of rooms and "medv" seem to be highly correlated which is intuitive because as the no of rooms increases , the housing value also increases.
+
+
+```{r}
+PCA.train$rotation[, c(1, 2)]
+```
+From the biplot graph as well as the factor loadings of these first 2 principal components, we can say that PC1 assigns approximatetly(almost) equal positive weights on "crim","indus","nox","age","tax","ptratio","lsat" and  slightly approximately equal negative weights on "zn","rm","dis","b" and "medv".
+
+PC2 assigns nearly zero weights on "crim","zn","tax and "b". It assigns equal negative weights on "nox",rm","age" and "medv". postive weights on "dis","ptratio"and "lsat".
+
+# This descriptional analysis indicates: 
+
+PC1 seems to be equally weighted on all teh features. There is not a single feature that stands out while interpreting PC1
+
+PC2 seems to be heavily and equally weighted on "rm","ptratio","dis" and "medv" indicating that No of rooms , distance from the employment centres, pupil-tutor ratio impact the median value of the housing unit which is quite intuitive.
+
+```{r}
+biplot.PC1.PC3 <- biplot(pca.train, choices = c(1, 3), scale = 0)
+biplot.PC1.PC3
+```
+
+The above graph shows that "indus" and "lsat" are highly correlated , "ptratio" and "age" are hughly correlated and also "medv" and "dis" are correlated and also "rm" and "zn" are correlated
+
+```{r}
+PCA.train$rotation[, c(1, 3)]
+```
+while interpreting the loadings , it seems that "indus" ,"nox" , "age" ,"tax" and "lsat" are approximately equally weighted .
+At the same time are "zn", "rm", "dis" ,"b" and "medv" are approximately equally weighted in the ame direction
+
+
+```{r}
+
+```
+
+
+# Part 5: Show that Component loadings are orthogonal.
+
+We can check if the component loadings are orthogonal to each other by using their dot product. The dot product of each component loading with its transpose must be zero. The matrix multiplication gives an identity matrix.
+
+
+```{r}
+PCA.loadings <- PCA.train$rotation
+round(t(PCA.loadings) %*% PCA.loadings, 12)
+```
+since the obtained matrix is orthogonal , we believe that the component loadings are orthogonal.
+
+
+# Part 6: Orthoganol Scores
+
+We can check orthogonaliy of the scores or factors by computing the correlation and
+covariance matricies. These should result in identity and diagonal matricies respectively
+
+```{r}
+round(cor(PCA.train$x), 4)
+```
+
+
+
+
+
+# Part 7: Holdout Validation
+
+For the holdout validation we have to multiply loadings from the training data with the factors/scores from the test data.
+
+```{r}
+PCA.predicted <- predict(PCA.train, newdata = test.scaled.data)
+#Holdout correlation
+round(cor(as.vector(test.scaled.data), as.vector(PCA.predicted[, 1 : 3] %*% t(PCA.train$rotation)[1 : 3, ])), 2)
+
+```
+
+```{r}
+#Training correlation
+round(cor(as.vector(train.scaled.data), as.vector(PCA.train$x[, 1 : 3] %*% t(PCA.train$rotation)[1 : 3, ])), 2)
+```
+
+The covariance between original holdout dataset and the validating dataset recovered from the first 3 principal components of training model is 0.51. The covariance or correlation between original training dataset and traning dataset recovered from the first 3 principal components is 0.85, which indicate very strong correlation for the training analysis.
+However for the holdout analysis correlation is not as strong as training but its still moderately correlated which did not match our expectations.
+
+
+# Part 8: Compute the Variance Account For (R 2 ) in the Holdout sample. That yields a measure of Holdout performance.
+
+```{r}
+holdout.factors <- predict(PCA.train, test.scaled.data)
+train.loadings <- PCA.train$rotation
+manual.test <- holdout.factors[,1:3] %*% t(train.loadings[,1:3])
+(cor(as.vector(test.scaled.data), as.vector(manual.test))^2)
+```
+
+The percentage of variance accounted for(VAR)  or R-squared by the holdout PCA model is low for what we would expect for not including too many components. We picked up 3 components to include 71% of the total variance of the original data. Therefore we could have
+that the R-squared or VAF number would be somewhere around 0.70. The actual R-squared is almost less than half of that.
+
+
+# Part 9: Rotate Components
+
+```{r}
+varimax(PCA.train$rotation)
+```
+After the rotation using the varimax function , the weightage of features in the pre-selected 3 components remained pretty much the same with a few exceptions. Some features' weights were reduced to zero and their lost value was re-distributed into each Principal component. The features that continue to share a heavy weight in each PC are stable and should be considered primarily when analyzing the internal proportion and constituents of the principal components.
+
+
+
+
+So results seemed to be quite different between the both .
+
+
+
+
+# Part 10: Plot rotated loadings(1) versus rotated loadings (2) and (3). 
+
+```{r}
+rotated.loadings <- varimax(PCA.train$rotation)$rotmat
+biplot(x = as.matrix(PCA.train$x[,1:2]), y = as.matrix(rotated.loadings[,1:2]))
+
+```
+
+## Final comments
+
+The interpretation of the Principal component loadings has changed a lot with the rotation using the varimax function. 
+
+I do not see PC1 dominated by any paticular feature which indicates that there is classic re-balancing.
+The original first component wighted more on Duration and Amount so these were still captured in the first two of the varimax rotated matrix.This could be easier to interpret as there are fewer major features in each PC , but I also think that the original components were just as easy to interpret.
+
+PC2 seems to be heavily dominated by "rm" ,"dis" "ptratio" and "medv". We cannot club this into a new feature.
+
+PC3 seems to be dominated heavily by "crim" "zn" and "b". This could be clubbed into a new feature such as "crime rate by black people zones "
+
+
+The chosen 3 principal components reduced the dataset variance a lot, and there is still enough covariance between original sample and recovered sample( factors * transpose(loadings)) from first 4 components. By reducing the data to 3PCs, still 73% of the data variance can be explained. Although PCA did not reduce the data to 3 PCs, but still helped us reduced a lot of it.
+
+The first 3 PCs  were able to reduce the number of features in this boston housing data. However,based on my anaysis I do not like the solution as the PCA model doesn't seem to be stable enough. There is quite a drop in correlation from the training set to the test data set. Possibly  increasing the number of PCs will help in the correlation drop. 
+
+SVD(simple value decomposition) could be a better alternative that could be applied to the boston housing dataset to deliver better results.

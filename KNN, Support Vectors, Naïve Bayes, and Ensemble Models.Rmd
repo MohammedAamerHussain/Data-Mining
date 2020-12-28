@@ -1,0 +1,1313 @@
+---
+title: "Assignment 6"
+author: "Aamer hussain"
+date: "8/27/2020"
+output: html_document
+---
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 6 August 30")
+```
+
+```{r}
+install.packages("pscl", repos = "https://cran.rstudio.com")
+```
+
+```{r}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+```
+
+## Loading the libraries
+```{r}
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(caret))
+suppressMessages(library(MASS))
+suppressMessages(library(class))
+suppressMessages(library(VIM))
+suppressMessages(library(rpart))
+suppressMessages(library(randomForest))
+suppressMessages(library(e1071))
+suppressMessages(library(ISLR))
+suppressMessages(library(gains))
+suppressMessages(library(rpart))
+suppressMessages(library(rattle))
+suppressMessages(library(RColorBrewer))
+suppressMessages(library(rpart.plot))
+suppressMessages(library(RColorBrewer))
+#suppressMessages(library(CORElearn))
+```
+
+## STEP-1
+
+
+
+
+## Loading the Diabetes Non-dummy dataset
+```{r}
+NoDummyVar.diabetes <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 5 August 23/NonDummyVar_diabetes.csv", header = TRUE,stringsAsFactors = T, strip.white = TRUE, na.strings = c("NA", "?"," ","."))
+```
+
+
+```{r}
+NoDummyVar.diabetes <- NoDummyVar.diabetes[,-c(1)]
+```
+
+
+```{r}
+str(NoDummyVar.diabetes)
+```
+
+```{r }
+character_cols = c('race','admission_source_id','time_in_hospital','num_lab_procedures','num_procedures','num_medications','number_outpatient','number_emergency','number_inpatient','number_diagnoses','max_glu_serum','A1Cresult','insulin','change', 'diabetesMed')
+
+NoDummyVar.diabetes[, character_cols] <- lapply(NoDummyVar.diabetes[, character_cols], as.factor)
+```
+
+# Converting the character columns to factors
+```{r}
+NoDummyVar.diabetes$age <- as.factor(NoDummyVar.diabetes$age)
+NoDummyVar.diabetes$diag_1 <- as.factor(NoDummyVar.diabetes$diag_1)
+NoDummyVar.diabetes$admission_type_id <- as.factor(NoDummyVar.diabetes$admission_type_id)
+NoDummyVar.diabetes$discharge_disposition_id <- as.factor(NoDummyVar.diabetes$discharge_disposition_id)
+NoDummyVar.diabetes$gender <- as.factor(NoDummyVar.diabetes$gender)
+NoDummyVar.diabetes$readmitted <- as.factor(NoDummyVar.diabetes$readmitted)
+```
+
+
+```{r}
+str(NoDummyVar.diabetes)
+```
+
+
+## Partitioning the Non dummy diabetes dataset
+```{r}
+library(caret)
+set.seed(96843)
+NoDummyVar.index <- createDataPartition(NoDummyVar.diabetes$readmitted, p = .7, list = FALSE)
+NoDummyVar.train <- NoDummyVar.diabetes[NoDummyVar.index,]
+NoDummyVar.test  <- NoDummyVar.diabetes[-NoDummyVar.index,]
+```
+
+
+## Loading the Dummy variable diabetes dataset
+```{r}
+dummyVar.diabetes <- read.csv("/Users/mohammedhussain/Desktop/UCHICAGO assigments/Data mining /Assignment 4 August 9/DummyVar_diabetes.csv", header = TRUE,stringsAsFactors = F, strip.white = TRUE, na.strings = c("NA", "?"," ","."))
+```
+
+##  Creating the train and test dataset from the Dummy variable diabetes dataset
+```{r}
+
+library(caret)
+set.seed(96843)
+dummyVar.index <- createDataPartition(dummyVar.diabetes$readmitted, p = .7, list = FALSE, )
+dummyVar.train <- dummyVar.diabetes[dummyVar.index,]
+dummyVar.test  <- dummyVar.diabetes[-dummyVar.index,]
+```
+
+
+
+## STEP - 2
+
+
+
+## Building the K-nearest neighbor classification model using the dummy varaible dataset
+```{r}
+k.optimum.val <- 1
+for(i in seq(10, 250, 10)) {
+ knn.models <- knn(train=dummyVar.train, test=dummyVar.test, cl=dummyVar.train$readmitted, k=i)
+ k.optimum.val[i] <- mean(100 * sum(dummyVar.test$readmitted == knn.models)/NROW(dummyVar.test$readmitted))
+ k=i
+ print(paste("Accuracy at k = ", i, " is: ", k.optimum.val[i], "%"))
+ }
+```
+
+The above output indicates that by the value of K = 80, the stable max accuracy of 54.08% can be achieved . This can also be represented graphically using an accuracy plot.
+
+##  Accuracy plot to find the optimum value of 'k'
+```{r}
+plot(k.optimum.val, type="b", xlab="K - Optimum Value",ylab="Accuracy Value")
+```
+
+Taking a look at the above plotted graph , the curve stabalizes around the 'k' value of 80 and leads to the maximum accuracy. 
+
+In other words , this means that the graph stabilizes and almost becomes flat once it reaches the value of k = 80
+
+
+## KNN classifier for our training data
+```{r}
+knn.bestModel.train <- knn(dummyVar.train,dummyVar.train,dummyVar.train$readmitted, k = 80 ) 
+```
+
+
+## Accuracy of the KNN classifier on the training data
+```{r}
+accuracy.knn.train <- 100 * sum(knn.bestModel.train == dummyVar.train$readmitted)/NROW(dummyVar.train$readmitted)
+accuracy.knn.train
+```
+
+
+## Sensitivity of the KNN classifier on the training data
+```{r}
+sensitivity.knn.train <- 100*length(which((dummyVar.train$readmitted==knn.bestModel.train) & (dummyVar.train$readmitted==1))) / length(which(dummyVar.train$readmitted==1))
+sensitivity.knn.train
+```
+
+## Specificity of the KNN classifier on the training data
+```{r}
+specificity.knn.train <- 100* length(which((dummyVar.train$readmitted==knn.bestModel.train) & (dummyVar.train$readmitted==0))) / length(which(dummyVar.train$readmitted==0))
+specificity.knn.train
+```
+
+## Precision of the KNN classifier on the train data
+```{r}
+precision.knn.train <- 100*length(which((dummyVar.train$readmitted==knn.bestModel.train) & (dummyVar.train$readmitted==1))) / length(which(knn.bestModel.train==1))
+precision.knn.train
+```
+
+
+## KNN classifier for our test data
+```{r}
+knn.bestModel.holdout <- knn(dummyVar.train, dummyVar.test, dummyVar.train$readmitted, k = 80 ) 
+```
+
+
+## Accuracy of the KNN classifier on the test data
+```{r}
+accuracy.knn.holdout <- 100 * sum(knn.bestModel.holdout == dummyVar.test$readmitted)/NROW(dummyVar.test$readmitted)
+accuracy.knn.holdout
+```
+
+## Sensitivity of the KNN classifier on the test data
+```{r}
+sensitivity.knn.holdout <- 100*length(which((dummyVar.test$readmitted==knn.bestModel.holdout) & (dummyVar.test$readmitted==1))) / length(which(dummyVar.test$readmitted==1))
+sensitivity.knn.holdout
+```
+
+
+## Specificity of the KNN classifier on the test data
+```{r}
+specificity.knn.holdout <- 100* length(which((dummyVar.test$readmitted==knn.bestModel.holdout) & (dummyVar.test$readmitted==0))) / length(which(dummyVar.test$readmitted==0))
+specificity.knn.holdout
+```
+
+
+## Precision of the KNN classifier on the test data
+```{r}
+precision.knn.holdout <- 100*length(which((dummyVar.test$readmitted==knn.bestModel.holdout) & (dummyVar.test$readmitted==1))) / length(which(knn.bestModel.holdout==1))
+precision.knn.holdout
+```
+
+
+```{r}
+# accuracy.knn <- 100*length(which(dummyVar.test$readmitted==knn.bestModel)==TRUE)/length(dummyVar.test$readmitted)
+# 
+# 
+# sensitivity.knn <- 100*length(which((dummyVar.test$readmitted==knn.bestModel) & (dummyVar.test$readmitted==0))) / length(which(dummyVar.test$readmitted==0))
+# 
+# 
+# specificity.knn <- 100* length(which((dummyVar.test$readmitted==knn.bestModel) & (dummyVar.test$readmitted==1))) / length(which(dummyVar.test$readmitted==1))
+# 
+# 
+# cat(" Accuracy =",round(accuracy.knn,2),'\n',"Sensitivity =",round(sensitivity.knn,2),'\n',"Specificity =",round(specificity.knn,2))
+```
+
+
+```{r}
+# library(ISLR)
+# library(caret)
+# knn.control <- trainControl(method="cv", number = 10)
+# set.seed(3735)
+# knn.fit <- train(readmitted ~ ., data = NoDummyVar.train, method = "knn", trControl = knn.control,metric="Accuracy",tuneGrid   = expand.grid(k = 1:100))
+# knn.fit
+```
+
+```{r}
+#plot(knn.fit)
+```
+
+
+## SVM using the Non-dummy dataset
+
+
+## SVM using the linear kernel
+```{r SVM - Model 1 - Linear}
+require(e1071)
+svm.linearKernel <- svm(readmitted ~ ., data = NoDummyVar.train, kernel = "linear",type = "C-classification")
+summary(svm.linearKernel)
+```
+
+# Predictions of the linear SVM on the train diabetes data
+```{r}
+pred.svm.linear.train <- predict(svm.linearKernel)
+```
+
+# Confusion matrix of the linear SVM results on the test data
+```{r}
+cfmatrix.svm.linear.train <- confusionMatrix(pred.svm.linear.train, NoDummyVar.train$readmitted)
+cfmatrix.svm.linear.train
+```
+
+## Accuracy score for the linear SVM 
+```{r}
+
+accuracy.svm.linear.train <- round(100*cfmatrix.svm.linear.train$byClass['Balanced Accuracy'])
+accuracy.svm.linear.train
+```    
+
+## Sensitivity score for the linear SVM 
+```{r}
+
+sensitivity.svm.linear.train <- round(100*cfmatrix.svm.linear.train$byClass['Sensitivity'])
+sensitivity.svm.linear.train
+```    
+
+## Specificity score for the linear SVM 
+```{r}
+
+specificity.svm.linear.train <- round(100*cfmatrix.svm.linear.train$byClass['Specificity'])
+specificity.svm.linear.train
+```    
+
+## Holdout validation of our SVM linear kernel model
+
+# Predictions of the linear SVM on the test diabetes data
+```{r}
+pred.svm.linear.holdout <- predict(svm.linearKernel, newdata = NoDummyVar.test)
+```
+
+# Confusion matrix of the linear SVM results on the test data
+```{r}
+cfmatrix.svm.linear.holdout <- confusionMatrix(pred.svm.linear.holdout, NoDummyVar.test$readmitted)
+cfmatrix.svm.linear.holdout
+```
+
+The linear model SVM results in a 60.01% accuracy, a sensitivity of 75.14% and specificity of 44.88%. We can run more iterations of SVMs with different kernel functions and see if we can get any improvement in the classification metrics or results.
+    
+## Accuracy score for the linear SVM 
+```{r}
+
+accuracy.svm.linear.holdout <- round(100*cfmatrix.svm.linear.holdout$byClass['Balanced Accuracy'])
+accuracy.svm.linear.holdout
+```    
+
+## Sensitivity score for the linear SVM 
+```{r}
+
+sensitivity.svm.linear.holdout <- round(100*cfmatrix.svm.linear.holdout$byClass['Sensitivity'])
+sensitivity.svm.linear.holdout
+```    
+
+## Specificity score for the linear SVM 
+```{r}
+
+specificity.svm.linear.holdout <- round(100*cfmatrix.svm.linear.holdout$byClass['Specificity'])
+specificity.svm.linear.holdout
+```    
+
+
+Our 2nd iteration of the SVM implements a radial basis kernel function.
+
+
+## SVM using Radial kernel
+```{r SVM - Model 2 - Radial}
+svm.radialKernel <- svm(readmitted ~ ., data = NoDummyVar.train, kernel = "radial")
+summary(svm.radialKernel)
+```
+
+
+# Predictions of the Radial kernel SVM on the Non dummy diabetes data
+```{r}
+pred.svm.radial <- predict(svm.radialKernel, newdata = NoDummyVar.test)
+```
+
+
+# Confusion matrix of the Radial kernel SVM results
+```{r}
+cfmatrix.svm.radial <- confusionMatrix(pred.svm.radial, NoDummyVar.test$readmitted)
+cfmatrix.svm.radial
+```
+With the radial basis kernel SVM , we get a slightly lower Balanced accuracy at 59.98% comapred to the Linear SVM. But  more importantly, the range or the gap between the specificity and sensitivity values slightly increases but not by a great extent .The sensitivity values has been slightly increased to 75.24% , while the specificity values deteriorated to 44.71%. 
+
+If the ultimate goal of our classification model is the have SVM with a high sensitivity value which affects the mortality of the patient i.e if a patient is wrongly classified or is not predicted as 'Readmitted', then he wont be readmitted within the next 30 days. In that case the radial kernel SVM is a reasonable model compared to the linear SVM.
+  
+ 
+
+## Accuracy score for the Radial kernel SVM 
+```{r}
+
+accuracy.svm.radial <- cfmatrix.svm.radial$byClass['Balanced Accuracy']
+accuracy.svm.radial
+```    
+
+## Sensitivity score for the Radial kernel SVM 
+```{r}
+
+sensitivity.svm.radial <- cfmatrix.svm.radial$byClass['Sensitivity']
+sensitivity.svm.radial
+```    
+
+## Specificity score for the Radial kernel SVM 
+```{r}
+
+specificity.svm.radial <- cfmatrix.svm.radial$byClass['Specificity']
+specificity.svm.radial
+```    
+
+
+Our 3rd iteration of the SVM model implements a polynomial kernel function
+ 
+ 
+## Polynomial kernel SVM
+```{r SVM - Model 3 - Polynomial}
+svm.polyKernel <- svm(readmitted ~ ., data = NoDummyVar.train, kernel = "polynomial")
+summary(svm.polyKernel)
+```
+
+# Predictions of the Polynomial kernel SVM on the Non dummy diabetes data
+
+```{r Model 3 - Polynomial SVM kernel, warning=FALSE, echo=FALSE}
+pred.svm.poly <- predict(svm.polyKernel, newdata = NoDummyVar.test)
+poly.svm.prob <- ifelse(pred.svm.poly>0.5,1,0)
+poly.svm.prob <- as.factor(poly.svm.prob)
+```
+
+
+## Confusion matrix of the Polynomial kernel SVM results
+```{r}
+cfmatrix.svm.poly <- confusionMatrix(pred.svm.poly, NoDummyVar.test$readmitted)
+cfmatrix.svm.poly
+```
+
+This Polynomial kernel SVM produces a model with a slightly higher accuracy than both the linear and radial basis kernel iterations. However, the sensitivity is slightly lower, at 74.04% and the specificity is slightly higher at 46.54%.
+This polynomial kernel has the lowest gap between the sensitivity and specificity which indicates that this is a very stable classification model.
+  
+
+
+
+## Accuracy score for the Polynomial kernel SVM 
+```{r}
+
+accuracy.svm.poly <- cfmatrix.svm.poly$byClass['Balanced Accuracy']
+accuracy.svm.poly
+```    
+
+## Sensitivity score for the Polynomial kernel SVM 
+```{r}
+
+sensitivity.svm.poly <- cfmatrix.svm.poly$byClass['Sensitivity']
+sensitivity.svm.poly
+```    
+
+## Specificity score for the Polynomial kernel SVM 
+```{r}
+
+specificity.svm.poly <- cfmatrix.svm.poly$byClass['Specificity']
+specificity.svm.poly
+```    
+
+
+  The last iteration of our SVM models implements a sigmoid kernel function
+
+## Sigmoid kernel SVM 
+```{r SVM - Model 4 - Sigmoid Kernel}
+svm.sigmoidKernel <- svm(readmitted ~ ., data = NoDummyVar.train, kernel = "sigmoid")
+summary(svm.sigmoidKernel)
+```
+
+# Predictions of the Sigmoid kernel SVM on the test diabetes data
+```{r SVM 4 - Sigmoid kernel, warning=FALSE, echo=FALSE}
+pred.svm.sigmoid <- predict(svm.sigmoidKernel, newdata = NoDummyVar.test, type = "raw")
+```
+
+
+## Confusion matrix of the Sigmoid kernel SVM results
+```{r}
+cfmatrix.svm.sigmoid <- confusionMatrix(pred.svm.sigmoid, NoDummyVar.test$readmitted)
+cfmatrix.svm.sigmoid
+```
+
+## Accuracy score for the Sigmoid kernel SVM 
+```{r}
+
+accuracy.svm.sigmoid <- cfmatrix.svm.sigmoid$byClass['Balanced Accuracy']
+accuracy.svm.sigmoid
+```    
+
+## Sensitivity score for the Sigmoid kernel SVM 
+```{r}
+
+sensitivity.svm.sigmoid <- cfmatrix.svm.sigmoid$byClass['Sensitivity']
+sensitivity.svm.sigmoid
+```    
+
+## Specificity score for the Sigmoid kernel SVM 
+```{r}
+
+specificity.svm.sigmoid <- cfmatrix.svm.sigmoid$byClass['Specificity']
+specificity.svm.sigmoid
+```    
+
+The sigmoid kernel SVM model isn't much strikingly different from our previous iterations. The accuracy is almost similar to the radial basis kernel SVM which wasn't that good . The sensitivity of the Sigmoid kernel is the highest among all the kernel iterations that we had so far and moreover the range between the sensitivity and specificity is also more than what we have observed amongst all the SVM kernels. If the hospital wants to place nearly equal importance or emphasis on not readmitted patients vs readmitted patients then this Sigmoid SVM model seems to be a very good candidate.
+  
+A validation metrics optimization or hyperparameter optimization model was not possible because of the computational and memory limitations. All of the SVM model iterations using various kernel functions were taking a lot of time to run or execute.
+
+Given the appropriate resources these SVM models could have been significantly improved using the hyperparameter optimizations using GPUs . In order to optimize these SVM models, we could take into consideration the cost values that could potentially represent and evaluate the tradeoff between maximizing the margins in the SVM and also at the same time minimizing the training set error. 
+
+
+## Creating a comparison matrix to compare sensitivity, Sensitivity/Specificity trade off and accuracy for all of our SVM models with different kernel functions
+```{r}
+svm.compare.matrix <- matrix(1:12, nrow = 4, dimnames = list(c("Linear kernel","Radial Basis kernel","Polynomial kernel","Sigmoid"), c("Accuracy","Sensitivity","Sensi-Speci GAP")))
+svm.compare.matrix[1,1] <- accuracy.svm.linear.holdout
+svm.compare.matrix[1,2] <- sensitivity.svm.linear.holdout
+svm.compare.matrix[1,3] <- sensitivity.svm.linear.holdout - specificity.svm.linear.holdout
+svm.compare.matrix[2,1] <- accuracy.svm.radial
+svm.compare.matrix[2,2] <- sensitivity.svm.radial
+svm.compare.matrix[2,3] <- sensitivity.svm.radial - specificity.svm.radial
+svm.compare.matrix[3,1] <- accuracy.svm.poly
+svm.compare.matrix[3,2] <- sensitivity.svm.poly
+svm.compare.matrix[3,3] <- sensitivity.svm.poly - specificity.svm.poly
+svm.compare.matrix[4,1] <- accuracy.svm.sigmoid
+svm.compare.matrix[4,2] <- sensitivity.svm.sigmoid
+svm.compare.matrix[4,3] <- sensitivity.svm.sigmoid - specificity.svm.sigmoid
+svm.compare.matrix
+```
+
+Taking a look at the above table , we wish to choose or select a SVM model that has very balanced accuracy with very good sensitivity and also at the same time good enough specificity and moreover the gap between the sensitivity and specificity should be low which would indicate that its a stable model. 
+
+Keenly looking at all the values , we find that the performance of the linear kernel SVM is better compared to all other SVM kernel models.
+
+
+
+## Naive Bayes classfication model using the diabetes data on the train data
+```{r}
+nb.bestModel <- naiveBayes(readmitted ~ age + race + time_in_hospital + discharge_disposition_id  + num_procedures + num_lab_procedures + number_outpatient + num_medications + number_inpatient + number_emergency +  insulin + number_diagnoses + change + A1Cresult + diabetesMed + diag_1 ,data= NoDummyVar.train)
+
+#probabilities
+pred.prob.nb.train <- predict(nb.bestModel,newdata = NoDummyVar.train,type="raw")
+
+# class membership
+pred.class.nb.train <- predict(nb.bestModel,newdata = NoDummyVar.train,type="class")
+
+
+#prop.table(table(NoDummyVar.test$readmitted,predictorNaiveBayes))
+```
+
+
+## Confusion matrix of the Naive bayes results on the training data
+```{r}
+train.nb.gains <- data.frame(actual = NoDummyVar.train$readmitted, 
+        predicted = pred.class.nb.train, pred.prob.nb.train)
+
+cfmatrix.NB.train <- confusionMatrix(pred.class.nb.train, NoDummyVar.train$readmitted)
+cfmatrix.NB.train
+```
+
+
+## Accuracy score of the Naive bayes model on the train data
+```{r}
+
+accuracy.NB.train <- round(100*cfmatrix.NB.train$byClass['Balanced Accuracy'])
+accuracy.NB.train
+```    
+
+## Sensitivity score of the Naive bayes model on the train data
+```{r}
+
+sensitivity.NB.train <- round(100*cfmatrix.NB.train$byClass['Sensitivity'])
+sensitivity.NB.train
+```    
+
+## Specificity score of the Naive bayes model on the train data
+```{r}
+
+specificity.NB.train<- round(100*cfmatrix.NB.train$byClass['Specificity'])
+specificity.NB.train
+```    
+
+## Confusion matrix of the Naive bayes results on the test data
+```{r}
+# probabilities
+pred.prob.nb.holdout <- predict(nb.bestModel, newdata = NoDummyVar.test, type = "raw")
+# class membership
+pred.class.nb.holdout <- predict(nb.bestModel, newdata = NoDummyVar.test, type = "class")
+
+
+test.nb.gains <- data.frame(actual = NoDummyVar.test$readmitted, 
+        predicted = pred.class.nb.holdout, pred.prob.nb.holdout)
+  # Confusion Matrix - test data
+cfmatrix.NB.holdout <- confusionMatrix(pred.class.nb.holdout, NoDummyVar.test$readmitted)
+cfmatrix.NB.holdout
+```
+
+## Accuracy score of the Naive bayes model on the test data
+```{r}
+
+accuracy.NB.holdout <- round(100*cfmatrix.NB.holdout$byClass['Balanced Accuracy'])
+accuracy.NB.holdout
+```    
+
+## Sensitivity score of the Naive bayes model on the test data
+```{r}
+
+sensitivity.NB.holdout <- round(100*cfmatrix.NB.holdout$byClass['Sensitivity'])
+sensitivity.NB.holdout
+```    
+
+## Specificity score of the Naive bayes model on the test data
+```{r}
+
+specificity.NB.holdout  <- round(100*cfmatrix.NB.holdout$byClass['Specificity'])
+specificity.NB.holdout
+```    
+
+
+
+The above Naive Bayes classification model resulted in  61.28% accuracy rate for the Non dummy train data, and 61.05% for the test set. Besides that, the sensitivity rate is also pretty much the same for the train as well as the holdout data which means that the model is a stable one.
+
+
+
+
+
+
+
+## Logistic regression
+
+
+
+## Creating the best logitic regression model for our Non dummy variable diabetes data
+```{r}
+LR.BestModel <- glm(formula = readmitted ~ race + gender + age + admission_type_id + 
+    discharge_disposition_id + admission_source_id + time_in_hospital + 
+    num_lab_procedures + num_procedures + num_medications + number_outpatient + 
+    number_emergency + number_inpatient + diag_1 + number_diagnoses + 
+    max_glu_serum + A1Cresult + insulin + diabetesMed, family = binomial(link = "logit"), 
+    data = NoDummyVar.train)
+```
+
+# predictions of the LR model on the train data
+```{r}
+pred.LR.train <- predict(LR.BestModel, type = 'response')
+
+```
+
+
+## Confusion matrix of the results on the train data by LR model
+```{r}
+predict.LR.train <- ifelse(pred.LR.train > 0.50,1,0)
+
+log.pred.LR.train <- as.factor(predict.LR.train)
+isReadmit.LR.train <- as.factor(NoDummyVar.train$readmitted)
+cfmatrix.LR.train <- confusionMatrix(log.pred.LR.train, isReadmit.LR.train, positive = "1")
+cfmatrix.LR.train
+```
+
+
+## Accuracy of the LR model on the train data
+```{r}
+accuracy.LR.train <- round(100*cfmatrix.LR.train$byClass['Balanced Accuracy'])
+accuracy.LR.train
+```
+
+## Sensitivity of the LR model on the train data
+```{r}
+sensitivity.LR.train <- round(100*cfmatrix.LR.train$byClass['Sensitivity'])
+sensitivity.LR.train
+```
+
+## Specificity of the LR model on the train data
+```{r}
+specificity.LR.train <- round(100*cfmatrix.LR.train$byClass['Specificity'])
+specificity.LR.train
+```
+
+# predictions of the LR model on the train data   ---  Holdout validation
+```{r}
+pred.LR.test <- predict(LR.BestModel, newdata = NoDummyVar.test, type = 'response')
+```
+
+
+## Accuracy on the Non-Dummy Variable test data
+```{r}
+predict.LR.test <- ifelse(pred.LR.test > 0.50,1,0)
+
+```
+
+
+
+
+##  Confusion matrix for the test data on the Non-dummy variable diabetes data
+```{r}
+log.pred.LR.holdout <- as.factor(predict.LR.test)
+isReadmit.LR.holdout <- as.factor(NoDummyVar.test$readmitted)
+cfmatrix.LR.holdout <- confusionMatrix(log.pred.LR.holdout, isReadmit.LR.holdout, positive = "1")
+cfmatrix.LR.holdout
+```
+
+
+## Accuracy of the LR model on the test data
+```{r}
+accuracy.LR.holdout <- round(100*cfmatrix.LR.holdout$byClass['Balanced Accuracy'])
+accuracy.LR.holdout
+```
+
+## Sensitivity of the LR model on the test data
+```{r}
+sensitivity.LR.holdout <- round(100*cfmatrix.LR.holdout$byClass['Sensitivity'])
+sensitivity.LR.holdout
+```
+
+## Specificity of the LR model on the test data
+```{r}
+specificity.LR.holdout <- round(100*cfmatrix.LR.holdout$byClass['Specificity'])
+specificity.LR.holdout
+```
+
+
+
+## Building the first decision tree on our dummy variable data by inlcuding all the 21 Non-dummy features
+```{r}
+rpart.tree <- rpart(formula = readmitted ~ ., data=NoDummyVar.train, method = 'class',control=rpart.control(cp=0,minsplit=15,minbucket = 10, xval=10, maxsurrogate=0, maxdepth = 30 ,parms=list(split=c("information","gini"))))
+```
+
+I have  set  minsplit param to 15, which makes sure that there must be a atleast or minimum of 30 observations/datapoints/rows in a node for split to be attempted on it. 
+
+
+
+This decision tree model is very complex with 21 Non-dummy features. The nodes and splits of this tree are 
+completely uninterpretable.
+
+
+We can fix this interpetability problem of this full model decision tree by pruning the tree. The first step that has to be taken to fix this problem is to find the correct and accurate value of the needed/required complexity parameter (cp). 
+
+Correct complexity parameter is a value that penalizes overall fit of the decision tree by adding each node. 
+
+
+I have tried using the value from the printcp table with the lowest xerror value for the complexity parameter and pruned the non dummy variable decision tree using that value and it lead to a decision which was less complex than the full model but still it was uninterpretable after plotting it.
+
+So I decided to use the value of CP from the plotcp() graph where the lines intercepts the x-axis at 0.00051
+
+
+
+
+## Best model classification tree after pruning
+```{r}
+rpart.bestModel <- prune(rpart.tree, cp = 0.00051, xval =10, minsplit = 15, minbucket = 10)
+```
+
+
+## Plotting the pruned decision tree for Non-dummy variable diabetes data
+```{r}
+rpart.plot(rpart.bestModel)
+```
+
+## Making the predictions from the pruned Decision tree using the Non-dummy variable diabetes train data 
+```{r}
+pred.rpart.train <- predict(rpart.bestModel, NoDummyVar.train, type = "class")
+```
+
+
+## generating the confusion matrix for the pruned decision tree for Non-dummy variable train data
+```{r}
+cfmatrix.rpart.train <- confusionMatrix(pred.rpart.train, as.factor(NoDummyVar.train$readmitted), positive = "1")
+cfmatrix.rpart.train
+```
+
+
+## Accuracy of the pruned classification tree
+```{r}
+accuracy.rpart.train <- round(100*cfmatrix.rpart.train$byClass['Balanced Accuracy'])
+accuracy.rpart.train
+```
+
+
+## Sensitivity of the pruned classification tree on the train data
+```{r}
+sensitivity.rpart.train <- round(100*cfmatrix.rpart.train$byClass['Sensitivity'])
+sensitivity.rpart.train
+```
+
+
+## Specificity of the pruned classification tree on the train data
+```{r}
+specificity.rpart.train <- round(100*cfmatrix.rpart.train$byClass['Specificity'])
+specificity.rpart.train
+```
+
+
+## Making the predictions from the pruned Decision tree using the Non-dummy variable diabetes test data 
+```{r}
+pred.rpart.holdout <- predict(rpart.bestModel, NoDummyVar.test, type = "class")
+```
+
+
+## generating the confusion matrix for the pruned decision for Non-dummy variable test data
+```{r}
+cfmatrix.rpart.holdout <- confusionMatrix(pred.rpart.holdout, as.factor(NoDummyVar.test$readmitted), positive = "1")
+cfmatrix.rpart.holdout
+```
+
+## Accuracy of the pruned classification tree
+```{r}
+accuracy.rpart.holdout <- round(100*cfmatrix.rpart.holdout$byClass['Balanced Accuracy'])
+accuracy.rpart.holdout
+```
+
+
+## Sensitivity of the pruned classification tree
+```{r}
+sensitivity.rpart.holdout <- round(100*cfmatrix.rpart.holdout$byClass['Sensitivity'])
+sensitivity.rpart.holdout
+```
+
+
+## Specificity of the pruned classification tree
+```{r}
+specificity.rpart.holdout <- round(100*cfmatrix.rpart.holdout$byClass['Specificity'])
+specificity.rpart.holdout
+```
+
+## Fitting the LDA model to our diabetes data
+
+
+```{r}
+lda.model = lda(readmitted~.,data=NoDummyVar.train)
+```
+
+
+## LDA predictions on your train data
+```{r}
+lda.train.pred <- predict(lda.model)
+```
+
+## Confusion matrix for diabetes train data
+```{r}
+results.lda.train <- prop.table(table(NoDummyVar.train$readmitted, lda.train.pred$class))
+results.lda.train
+```
+
+## Calculating the accuracy of the LDA model on our train data
+```{r}
+accuracy.lda.train <- round(100*(results.lda.train[1,1] + results.lda.train[2,2]))
+accuracy.lda.train
+```
+The accuracy of the LDA model on our train data came around 62% .
+
+## Sensitivity of the LDA on train data
+```{r}
+sensitivity.lda.train <- round(100*results.lda.train[2,2]/sum(results.lda.train[2,]))
+sensitivity.lda.train
+```
+
+## Specificity of the LDA on train data
+```{r}
+specificity.lda.train <- round(100*results.lda.train[1,1]/sum(results.lda.train[1,]))
+specificity.lda.train
+```
+
+## Precision of the LDA on train data
+```{r}
+precision.lda.train <- round(100*results.lda.train[2,2]/sum(results.lda.train[1,]))
+precision.lda.train
+```
+
+
+The sensitivity of the LDA model on the train data is 46% which is not too good.
+
+
+## Holdout validation
+
+```{r}
+lda.holdout.pred <- predict(lda.model, newdata = NoDummyVar.test)$class 
+```
+
+
+
+
+```{r}
+results.lda.holdout <- prop.table(table(NoDummyVar.test$readmitted, lda.holdout.pred))
+results.lda.holdout
+```
+
+
+```{r}
+accuracy.lda.holdout <- round(100*(results.lda.holdout[1,1] + results.lda.holdout[2,2]))
+accuracy.lda.holdout
+```
+
+## Sensitivity of the LDA on Holdout data
+```{r}
+sensitivity.lda.holdout <- round(100*results.lda.holdout[2,2]/sum(results.lda.holdout[2,]))
+sensitivity.lda.holdout
+```
+
+
+## Specificity of the LDA on Holdout data
+```{r}
+specificity.lda.holdout <- round(100*results.lda.holdout[1,1]/sum(results.lda.holdout[1,]))
+specificity.lda.holdout
+```
+
+## Precision of the LDA on test data
+```{r}
+precision.lda.holdout <- round(100*results.lda.holdout[2,2]/sum(results.lda.holdout[1,]))
+precision.lda.holdout
+```
+
+## Fitting the QDA model on the diabetes train data
+```{r}
+qda.model <- qda(readmitted ~ ., data = NoDummyVar.train)
+```
+
+
+## QDA predictions on train data
+```{r}
+qda.train.pred <- predict(qda.model)
+```
+
+## Confusion matrix for QDA results on the training data
+```{r}
+results.qda.train <- prop.table(table(NoDummyVar.train$readmitted, qda.train.pred$class))
+results.qda.train
+```
+
+
+```{r}
+accuracy.qda.train <- round(100*(results.qda.train[1,1] + results.qda.train[2,2]))
+accuracy.qda.train
+```
+The accuracy of the QDA model on the train data came around 60% which is not too good.
+
+## Sensitivity of the QDA on train data
+```{r}
+sensitivity.qda.train <- round(100*results.qda.train[2,2]/sum(results.qda.train[2,]))
+sensitivity.qda.train
+```
+
+
+## Specificity of the QDA on train data
+```{r}
+specificity.qda.train <- round(100*results.qda.train[1,1]/sum(results.qda.train[1,]))
+specificity.qda.train
+```
+
+
+## Precision of the QDA on train data
+```{r}
+precision.qda.train <- round(100*results.qda.train[2,2]/sum(results.qda.train[1,]))
+precision.qda.train
+```
+
+## Holdout validation for QDA
+
+```{r}
+qda.holdout.pred <- predict(qda.model, newdata = NoDummyVar.test)$class 
+```
+
+
+## Confusion matrix for the QDA results on the holdout data
+```{r}
+results.qda.holdout <- prop.table(table(NoDummyVar.test$readmitted, qda.holdout.pred))
+results.qda.holdout
+```
+
+
+```{r}
+accuracy.qda.holdout <- round(100*(results.qda.holdout[1,1] + results.qda.holdout[2,2]))
+accuracy.qda.holdout
+```
+
+
+## Sensitivity of the LDA on Holdout data
+```{r}
+sensitivity.qda.holdout <- round(100*results.qda.holdout[2,2]/sum(results.qda.holdout[2,]))
+sensitivity.qda.holdout
+```
+
+## Specificity of the QDA on Holdout data
+```{r}
+specificity.qda.holdout <- round(100*results.qda.holdout[1,1]/sum(results.qda.holdout[1,]))
+specificity.qda.holdout
+```
+
+## Precision of the QDA on Holdout data
+```{r}
+precision.qda.holdout <- round(100*results.qda.holdout[2,2]/sum(results.qda.holdout[1,]))
+precision.qda.holdout
+```
+
+## Ensemble model
+```{r}
+ensemble.model.train <- data.frame(matrix(nrow = 68637, ncol = 8))
+ensemble.model.holdout <- data.frame(matrix(nrow = 29415, ncol = 8))
+colnames(ensemble.model.train) <- c("LR", "DTree", "LDA", "QDA","KNN","SVM","NB", "Ensemble")
+colnames(ensemble.model.holdout) <- c("LR", "DTree", "LDA", "QDA","KNN","SVM","NB", "Ensemble")
+
+```
+
+
+```{r}
+ensemble.model.train[,1] <- log.pred.LR.train
+ensemble.model.train[,2] <- pred.rpart.train
+ensemble.model.train[,3] <- lda.train.pred$class
+ensemble.model.train[,4] <- qda.train.pred$class
+ensemble.model.train[,5] <- knn.bestModel.train
+ensemble.model.train[,6] <- pred.svm.linear.train
+ensemble.model.train[,7] <- pred.class.nb.train
+```
+
+
+
+```{r}
+ensemble.model.holdout[,1] <- log.pred.LR.holdout
+ensemble.model.holdout[,2] <- pred.rpart.holdout
+ensemble.model.holdout[,3] <- lda.holdout.pred
+ensemble.model.holdout[,4] <- qda.holdout.pred
+ensemble.model.holdout[,5] <- knn.bestModel.holdout
+ensemble.model.holdout[,6] <- pred.svm.linear.holdout
+ensemble.model.holdout[,7] <- pred.class.nb.holdout
+```
+
+
+
+
+## Ensemble model function
+```{r}
+ensemble.model.function <- function(df) {
+  numeric.vec <- (as.numeric(df[,1])-1 + as.numeric(df[,2])-1 + as.numeric(df[,3])-1 + as.numeric(df[,4])-1 +
+  as.numeric(df[,5])-1 + as.numeric(df[,6])-1 + as.numeric(df[,7])-1)
+  sapply(numeric.vec, function(x) {
+    if(x > 3) {
+      1
+    } else if(x <= 3) {
+      0
+    } else {
+      sample(c(0,1), 1)
+    }
+  })
+}
+```
+
+
+
+
+## Ensemble model predictions on the train data
+```{r}
+pred.ensemble.train <- ensemble.model.function(ensemble.model.train)
+
+```
+
+## Confusion matrix of the ensemble model on the train data
+```{r}
+cfmatrix.ensemble.train <- prop.table(table(NoDummyVar.train$readmitted,pred.ensemble.train))
+cfmatrix.ensemble.train
+
+```
+## Accuracy of the ensemble model on the train data
+```{r}
+accuracy.ensemble.train <- round(100*(cfmatrix.ensemble.train[1,1] + cfmatrix.ensemble.train[2,2]))
+accuracy.ensemble.train
+```
+
+
+## Sensitivity of the ensemble model on the train data
+```{r}
+sensitivity.ensemble.train <- round(100*cfmatrix.ensemble.train[2,2]/sum(cfmatrix.ensemble.train[2,]))
+sensitivity.ensemble.train
+```
+
+## Specificity of the ensemble model on the train data
+```{r}
+specificity.ensemble.train <- round(100*cfmatrix.ensemble.train[1,1]/sum(cfmatrix.ensemble.train[1,]))
+specificity.ensemble.train
+```
+
+
+
+## Precision of the Ensemble model on train data
+```{r}
+precision.ensemble.train <- round(100*cfmatrix.ensemble.train[2,2]/sum(cfmatrix.ensemble.train[1,]))
+precision.ensemble.train
+```
+
+## Ensemble model predictions on the test data
+```{r}
+pred.ensemble.holdout <- ensemble.model.function(ensemble.model.holdout)
+
+```
+
+
+## Confusion matrix of the ensemble model on the test data
+```{r}
+cfmatrix.ensemble.test <- prop.table(table(NoDummyVar.test$readmitted,pred.ensemble.holdout))
+cfmatrix.ensemble.test
+```
+
+
+## Accuracy of the ensemble model on  Holdout data
+```{r}
+accuracy.ensemble.holdout <- round(100*(cfmatrix.ensemble.test[1,1] + cfmatrix.ensemble.test[2,2]))
+accuracy.ensemble.holdout
+```
+
+
+## Sensitivity of the ensemble model on Holdout data
+```{r}
+sensitivity.ensemble.holdout <- round(100*cfmatrix.ensemble.test[2,2]/sum(cfmatrix.ensemble.test[2,]))
+sensitivity.ensemble.holdout
+```
+
+## Specificity of the ensemble model on Holdout data
+```{r}
+specificity.ensemble.holdout <- round(100*cfmatrix.ensemble.test[1,1]/sum(cfmatrix.ensemble.test[1,]))
+specificity.ensemble.holdout
+```
+
+
+## Precision of the Ensemble model on Holdout data
+```{r}
+precision.ensemble.holdout <- round(100*cfmatrix.ensemble.test[2,2]/sum(cfmatrix.ensemble.test[1,]))
+precision.ensemble.holdout
+```
+
+## Comments about the performance of the ensemble model:
+
+I expected the ensemble model to perform better in terms of both accuracy and sensitivity. Although it achieved 'slightly' better accuracy than rest of the models , the sensitivity metric value (which is 45) of the ensemble model did not outperform or exceed the sensitivity value of the Linear SVM model(which is 75). So I am not quite impressed with how the ensemble performed in terms of the senstivity.
+
+
+## Final comparison:
+
+
+
+## Creating a final comparison matrix to compare Sensitivity, Specificity and accuracy for all of our models with the ensemble model for the TRAIN DATA
+```{r}
+Final.comparison.matrix.train <- matrix(1:32, nrow = 8, dimnames = list(c("Logistic regression","Decision tree","Linear discriminant analysis","Quadratic discriminant analysis","K-nearest neighbor","Support Vector Machine","Naive Bayes", "Ensemble model"), c("Accuracy","Sensitivity","Specificity","Sensi-Speci GAP")))
+Final.comparison.matrix.train[1,1] <- accuracy.LR.train
+Final.comparison.matrix.train[1,2] <- sensitivity.LR.train
+Final.comparison.matrix.train[1,3] <- specificity.LR.train 
+Final.comparison.matrix.train[1,4] <- abs(sensitivity.LR.train - specificity.LR.train)
+Final.comparison.matrix.train[2,1] <- accuracy.rpart.train
+Final.comparison.matrix.train[2,2] <- sensitivity.rpart.train
+Final.comparison.matrix.train[2,3] <- specificity.rpart.train 
+Final.comparison.matrix.train[2,4] <- abs(sensitivity.rpart.train - specificity.rpart.train)
+Final.comparison.matrix.train[3,1] <- accuracy.lda.train
+Final.comparison.matrix.train[3,2] <- sensitivity.lda.train
+Final.comparison.matrix.train[3,3] <- specificity.lda.train 
+Final.comparison.matrix.train[3,4] <- abs(sensitivity.lda.train - specificity.lda.train)
+Final.comparison.matrix.train[4,1] <- accuracy.qda.train
+Final.comparison.matrix.train[4,2] <- sensitivity.qda.train
+Final.comparison.matrix.train[4,3] <- specificity.qda.train 
+Final.comparison.matrix.train[4,4] <- abs(sensitivity.qda.train - specificity.qda.train)
+Final.comparison.matrix.train[5,1] <- accuracy.knn.train
+Final.comparison.matrix.train[5,2] <- sensitivity.knn.train
+Final.comparison.matrix.train[5,3] <- specificity.knn.train 
+Final.comparison.matrix.train[5,4] <- abs(sensitivity.knn.train - specificity.knn.train)
+Final.comparison.matrix.train[6,1] <- accuracy.svm.linear.train
+Final.comparison.matrix.train[6,2] <- sensitivity.svm.linear.train
+Final.comparison.matrix.train[6,3] <- specificity.svm.linear.train 
+Final.comparison.matrix.train[6,4] <- abs(sensitivity.svm.linear.train - specificity.svm.linear.train)
+Final.comparison.matrix.train[7,1] <- accuracy.NB.train
+Final.comparison.matrix.train[7,2] <- sensitivity.NB.train
+Final.comparison.matrix.train[7,3] <- specificity.NB.train 
+Final.comparison.matrix.train[7,4] <- abs(sensitivity.NB.train - specificity.NB.train)
+Final.comparison.matrix.train[8,1] <- accuracy.ensemble.train
+Final.comparison.matrix.train[8,2] <- sensitivity.ensemble.train
+Final.comparison.matrix.train[8,3] <- specificity.ensemble.train
+Final.comparison.matrix.train[8,4] <- abs(sensitivity.ensemble.train - specificity.ensemble.train)
+Final.comparison.matrix.train
+```
+
+
+For the training dataset, 
+
+ *******     Best model in terms of Accuracy ******** :  Ensemble model & Linear Discriminant analysis
+  
+  *******     Best model in terms of Sensitivity ******** :  linear SVM classifier
+  
+  *******     Best model in terms of Specificity ******** :   Quadratic discrminat analysis
+  
+  *******     Best model in terms of Specificity- Specificity GAP  ******** :   Naive Bayes classifier
+  
+  Overall the linear SVM has better performance than all other classification models in terms of overall accuracy and sensitivity. 
+  
+  Sequence(descending order) of high performing classification models in terms of both accuracy and sensitivity for the TRAINING dataset :
+  
+  1.linear SVM
+  2.Naive bayes
+  3.Decision classification tree(pruned)
+  4.Linear Discriminant analysis
+  5.Ensemble model
+  6.Logistic regression
+  7.Quadratic discriminant analysis
+  8.K-nearest neighbor
+
+  
+  
+
+
+## Creating a final comparison matrix to compare Sensitivity, Specificity and accuracy for all of our models with the ensemble model for the TEST DATA
+```{r}
+Final.comparison.matrix.holdout <- matrix(1:32, nrow = 8, dimnames = list(c("Logistic regression","Decision tree","Linear discriminant analysis","Quadratic discriminant analysis","K-nearest neighbor","Support Vector Machine","Naive Bayes", "Ensemble model"), c("Accuracy","Sensitivity","Specificity","Sensi-Speci GAP")))
+Final.comparison.matrix.holdout[1,1] <- accuracy.LR.holdout
+Final.comparison.matrix.holdout[1,2] <- sensitivity.LR.holdout
+Final.comparison.matrix.holdout[1,3] <- specificity.LR.holdout 
+Final.comparison.matrix.holdout[1,4] <- abs(sensitivity.LR.holdout - specificity.LR.holdout)
+Final.comparison.matrix.holdout[2,1] <- accuracy.rpart.holdout
+Final.comparison.matrix.holdout[2,2] <- sensitivity.rpart.holdout
+Final.comparison.matrix.holdout[2,3] <- specificity.rpart.holdout 
+Final.comparison.matrix.holdout[2,4] <- abs(sensitivity.rpart.holdout - specificity.rpart.holdout)
+Final.comparison.matrix.holdout[3,1] <- accuracy.lda.holdout
+Final.comparison.matrix.holdout[3,2] <- sensitivity.lda.holdout
+Final.comparison.matrix.holdout[3,3] <- specificity.lda.holdout 
+Final.comparison.matrix.holdout[3,4] <- abs(sensitivity.lda.holdout - specificity.lda.holdout)
+Final.comparison.matrix.holdout[4,1] <- accuracy.qda.holdout
+Final.comparison.matrix.holdout[4,2] <- sensitivity.qda.holdout
+Final.comparison.matrix.holdout[4,3] <- specificity.qda.holdout 
+Final.comparison.matrix.holdout[4,4] <- abs(sensitivity.qda.holdout - specificity.qda.holdout)
+Final.comparison.matrix.holdout[5,1] <- accuracy.knn.holdout
+Final.comparison.matrix.holdout[5,2] <- sensitivity.knn.holdout
+Final.comparison.matrix.holdout[5,3] <- specificity.knn.holdout
+Final.comparison.matrix.holdout[5,4] <- abs(sensitivity.knn.holdout - specificity.knn.holdout)
+Final.comparison.matrix.holdout[6,1] <- accuracy.svm.linear.holdout
+Final.comparison.matrix.holdout[6,2] <- sensitivity.svm.linear.holdout
+Final.comparison.matrix.holdout[6,3] <- specificity.svm.linear.holdout 
+Final.comparison.matrix.holdout[6,4] <- abs(sensitivity.svm.linear.holdout - specificity.svm.linear.holdout)
+Final.comparison.matrix.holdout[7,1] <- accuracy.NB.holdout
+Final.comparison.matrix.holdout[7,2] <- sensitivity.NB.holdout
+Final.comparison.matrix.holdout[7,3] <- specificity.NB.holdout 
+Final.comparison.matrix.holdout[7,4] <- abs(sensitivity.NB.holdout - specificity.NB.holdout)
+Final.comparison.matrix.holdout[8,1] <- accuracy.ensemble.holdout
+Final.comparison.matrix.holdout[8,2] <- sensitivity.ensemble.holdout
+Final.comparison.matrix.holdout[8,3] <- specificity.ensemble.holdout
+Final.comparison.matrix.holdout[8,4] <- abs(sensitivity.ensemble.holdout - specificity.ensemble.holdout)
+Final.comparison.matrix.holdout
+```
+
+Sequence(descending order) of high performing classification models in terms of both accuracy and sensitivity for the HOLDOUT cross-validation dataset :
+  
+  1.linear SVM
+  2.Naive bayes
+  3.Decision classification tree(pruned)
+  4.Linear Discriminant analysis
+  5.Ensemble model
+  6.Logistic regression
+  7.Quadratic discriminant analysis
+  8.K-nearest neighbor
+
+Both the evaluation results for the training as well as the holdout dataset are same which means that our calssification models are stable.
+
+## Validation criteria for evaluating all of the classification models :
+
+
+Some of the most common  measures used to evaluate the performance of the classifications algorithms
+are Accuracy,  ROC curve, sensitivity, F1 score, specificity, precision etc. The nature and type of the data
+governs which particular classification metrics are used to evaluate and compare the performance of multiple classifiation models. Since the diabetes readmission dataset is related to medical domain or medical diagnostics , failure to predict or misclassifying patients that need to readmitted as +ve  may lead to a fatal cost.  Therefore it is highly important and imperative to optimize on the value of sensitivity (classification measure to lower the False negative rate). 
+
+
+Specificity is not major concern because type 1 error in this case does not affect the mortality of the patient i.e if a patient is wrongly classified or predicted as 'Readmitted' , he is going to admitted to hospital without any major health concern which is fine.
+
+On the other hand We are more concerned about the sensitivity of our model because it directly affects the mortality rates if the patients that were not predicted to be readmitted but actually should have been i.e type 2 error. To understand this in terms of the classfication metrics , we need to look at the sensitivity score and accuracy score of the test/train data for all of our models and then compare it.
+
+
+For the holdout dataset,
+
+
+  *******     Best model in terms of Accuracy ******** :  Ensemble model & Linear Discriminant analysis
+  
+  *******     Best model in terms of Sensitivity ******** :  linear SVM classifier
+  
+  *******     Best model in terms of Specificity ******** :   Quadratic discrminat analysis
+  
+  *******     Best model in terms of Specificity- Specificity GAP  ******** :   Naive Bayes classifier
+
+
+For the holdout set or the testing dataset, the K-nearest neighbor classifier has the worst value for the accuracy as well as for the specificity . However it has better sensitivity value compared to all the models including the ensemble model except for the linear SVM and Naive bayes classifier.
+
+
+
+
+Even Naive bayes performed almost as good as the SVM classifier with exactly similar accuracy but it has slightly lower sensitivity compared to the linear SVM .However it has slightly higher specificity and moreover the GAP between the sensitivity and the specificity is the lowest among all the classification models which is a very good sign that indicates that Naive bayes model is a stable model. 
+
+In our use case , sensitivity is of major concern with the high significance as it affects the mortality of the patient and we need it ot be as high as possible. Overall we find that the accuracy of all our classification models is pretty much the same , so the major criteria for choosing the best model is the sensitivity value which is given by : sensitivity = TP/(TP+FN) . 
+We want our type 2 classification error to be as low as possible and in order to achieve that the False negative rate that has to be lower which forms a part of the denominator in the sensitivity equation .
+
+
+
+Therefore we choose the  linear SVM classifier as our final model which can be deployed to production as it has the highest sensitivity value out of all the models that we did.
+
+
+
+## Which models yielded the best predictions of "Yes"?
+
+Here precision and sensitivity both have to be taken into consideration.
+
+
+## comparing the precision values on the train data
+```{r}
+precision.compare.matrix.train <- matrix(1:8, nrow = 8, dimnames = list(c("Logistic regression","Decision tree","Linear discriminant analysis","Quadratic discriminant analysis","K-nearest neighbor","Support Vector Machine","Naive Bayes", "Ensemble model"), c("Precision")))
+precision.compare.matrix.train[1,1] <- 100*cfmatrix.LR.train$byClass['Pos Pred Value']
+precision.compare.matrix.train[2,1] <- 100*cfmatrix.rpart.train$byClass['Pos Pred Value']
+precision.compare.matrix.train[3,1] <- precision.lda.train
+precision.compare.matrix.train[4,1] <- precision.qda.train
+precision.compare.matrix.train[5,1] <- precision.knn.train
+precision.compare.matrix.train[6,1] <-100* cfmatrix.svm.linear.train$byClass['Pos Pred Value']
+precision.compare.matrix.train[7,1] <- 100*cfmatrix.NB.train$byClass['Pos Pred Value']
+precision.compare.matrix.train[8,1] <- precision.ensemble.train
+precision.compare.matrix.train
+```
+
+Sequence of models(descending order) on the basis of precision valueson the train data:
+
+1.Logistic regression
+2.Decision classification tree
+3.naive bayes
+4.linear SVM
+5.k-nearest neighbor
+6.linear discrminant analysis
+7.Ensemble model
+8.Quadratic discrminant analysis
+
+
+
+## comparing the precision values on the holdout data
+```{r}
+precision.compare.matrix.holdout <- matrix(1:8, nrow = 8, dimnames = list(c("Logistic regression","Decision tree","Linear discriminant analysis","Quadratic discriminant analysis","K-nearest neighbor","Support Vector Machine","Naive Bayes", "Ensemble model"), c("Precision")))
+precision.compare.matrix.holdout[1,1] <- 100*cfmatrix.LR.holdout$byClass['Pos Pred Value']
+precision.compare.matrix.holdout[2,1] <- 100*cfmatrix.rpart.holdout$byClass['Pos Pred Value']
+precision.compare.matrix.holdout[3,1] <- precision.lda.holdout
+precision.compare.matrix.holdout[4,1] <- precision.qda.holdout
+precision.compare.matrix.holdout[5,1] <- precision.knn.holdout
+precision.compare.matrix.holdout[6,1] <-100* cfmatrix.svm.linear.holdout$byClass['Pos Pred Value']
+precision.compare.matrix.holdout[7,1] <- 100*cfmatrix.NB.holdout$byClass['Pos Pred Value']
+precision.compare.matrix.holdout[8,1] <- precision.ensemble.holdout
+precision.compare.matrix.holdout
+```
+
+Sequence of models(descending order) on the basis of precision values on the holdout data:
+
+1.Logistic regression
+2.Decision classification tree
+3.naive bayes
+4.linear SVM
+5.k-nearest neighbor
+6.linear discrminant analysis
+7.Ensemble model
+8.Quadratic discrminant analysis
+
+
+precision results for train and holdout data is pretty much the same
+
+## **** Final Summary and comments  *******:
+
+
+If we are more interested in predicting which particular patients are most likely to be readmitted, I would pick the model with the highest value for sensitivity and minimize the type 2 error(false negative) . 
+
+Hospital or health administrators could possibly can use LINEAR SVM to in order to help or assist  them to see which particular patient characteristics are likely to preddict or classify a patient in the 'readmit' category. The hospital or health institutions can then implement policies or procedures or take initiatives to minimize the proportion of readmitted patients.
+
+Out of all the models I found that the linear SVM classifier has outperformed all of our classifications models including the ensemble model.
+
+
